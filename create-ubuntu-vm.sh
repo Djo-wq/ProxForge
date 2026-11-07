@@ -4,9 +4,9 @@ set -euo pipefail
 VMID_DEFAULT=$(pvesh get /cluster/nextid)
 VMID="${VMID:-$VMID_DEFAULT}"
 HN="${HN:-ubuntu-vm}"
-CPU_CORES="${CPU_CORES:-2}"
+CPU_CORES="${CPU_CORES:-1}"
 RAM_SIZE="${RAM_SIZE:-2048}"
-DISK_SIZE="${DISK_SIZE:-20G}"
+DISK_SIZE="${DISK_SIZE:-30G}"
 STORAGE="${STORAGE:-local-lvm}"
 BRIDGE="${BRIDGE:-vmbr0}"
 START_VM="${START_VM:-yes}"
