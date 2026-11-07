@@ -1,3 +1,7 @@
+ProxForge
+
+
+
 Proxmox VE — Scripts d'Automatisation de VM
 
 Ce dépôt contient une collection de scripts Bash autonomes (standalone) conçus pour déployer rapidement des machines virtuelles (VM) sur Proxmox VE 8.x / 7.x sans aucune dépendance externe.
