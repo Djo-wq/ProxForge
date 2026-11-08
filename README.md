@@ -9,7 +9,7 @@
 ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 ```
 
-**⚡ Déployez des machines virtuelles Linux et Windows, des pare-feux OPNsense et des conteneurs Docker sur Proxmox VE : entièrement automatisé, optimisé et sans dépendance externe.**
+**⚡ Déployez des machines virtuelles et conteneur lxc sur Proxmox VE de entièrement automatisé, optimisé et sans dépendance externe.**
 
 ```bash
 $ ssh root@proxmox
