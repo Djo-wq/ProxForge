@@ -46,7 +46,6 @@ LATEST_VERSION_DIR=$(curl -fsSL "$KALI_MIRROR" | grep -oP 'href="kali-\d{4}\.\d+
 
 if [[ -z "$LATEST_VERSION_DIR" ]]; then
   echo -e "\e[31m[ERREUR]\e[0m Impossible de trouver la dernière version Kali."
-  echo -e "\e[31m[ERREUR]\e[0m Vérifiez l'accès Internet ou l'URL : $KALI_MIRROR"
   exit 1
 fi
 
@@ -65,7 +64,7 @@ if [[ ! -f "$QCOW2_FILE" ]]; then
 
   echo -e "\e[34m[INFO]\e[0m Extraction et conversion de l'image..."
   if ! tar -xf "$CACHE_FILE" -C "$LOCAL_CACHE_DIR" --wildcards "*.raw" 2>/dev/null; then
-    echo -e "\e[31m[ERREUR]\e[0m Échec de l'extraction. Vérifiez que 'tar' et 'xz' sont installés."
+    echo -e "\e[31m[ERREUR]\e[0m Échec de l'extraction. Vérifiez que 'tar' est installé."
     exit 1
   fi
 
