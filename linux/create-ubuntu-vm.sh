@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Script de création automatisée VM Ubuntu Cloud-Init (Optimisé)
+# Script de création automatisée VM Ubuntu Cloud-Init (Proxmox VE 9.2)
 set -euo pipefail
 
 # --- CONFIGURATION ---
@@ -14,52 +14,84 @@ BRIDGE="${BRIDGE:-vmbr0}"
 START_VM="${START_VM:-yes}"
 UBUNTU_VERSION="${UBUNTU_VERSION:-24.04}"
 
+# Validation DISK_SIZE (doit finir par G ou être un nombre)
+if [[ ! "$DISK_SIZE" =~ ^[0-9]+[GgMm]?$ && ! "$DISK_SIZE" =~ ^[0-9]+$ ]]; then
+  echo -e "\e[31m[ERREUR]\e[0m DISK_SIZE doit être au format '20G', '50M' ou '100' (Go)."
+  exit 1
+fi
+
+# Mapping versions Ubuntu (LTS uniquement pour Proxmox 9.2)
 case "$UBUNTU_VERSION" in
-  26.04) UBUNTU_CODENAME="resolute" ;;
   24.04) UBUNTU_CODENAME="noble" ;;
   22.04) UBUNTU_CODENAME="jammy" ;;
-  *) echo -e "\e[31m[ERREUR]\e[0m Version d'Ubuntu non supportée."; exit 1 ;;
+  20.04) UBUNTU_CODENAME="focal" ;;
+  *) echo -e "\e[31m[ERREUR]\e[0m Version Ubuntu non supportée. Utilisez 20.04, 22.04 ou 24.04."; exit 1 ;;
 esac
 
 ARCH=$(uname -m)
-[[ "$ARCH" == "x86_64" ]] && UBUNTU_ARCH="amd64" || UBUNTU_ARCH="arm64"
+UBUNTU_ARCH="amd64"
+[[ "$ARCH" == "aarch64" ]] && UBUNTU_ARCH="arm64"
 
 LOCAL_CACHE_DIR="/var/lib/vz/template/iso"
-trap 'rm -f "${LOCAL_CACHE_DIR}/"*.tmp 2>/dev/null' EXIT ERR
+VM_CREATED=0
 
-echo -e "\e[34m[INFO]\e[0m Début de la création de la VM Ubuntu $UBUNTU_VERSION (ID: $VMID)..."
+cleanup() {
+  local exit_code=$?
+  rm -f "${LOCAL_CACHE_DIR}"/ubuntu-*.tmp 2>/dev/null || true
+  if (( exit_code != 0 )) && (( VM_CREATED )); then
+    echo -e "\e[33m[NETTOYAGE]\e[0m Suppression de la VM $VMID..."
+    qm stop "$VMID" >/dev/null 2>&1 || true
+    qm destroy "$VMID" --destroy-unreferenced-disks 1 --purge 1 >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 
-# --- TÉLÉCHARGEMENT ATOMIQUE ---
+echo -e "\e[34m[INFO]\e[0m Création VM Ubuntu $UBUNTU_VERSION (ID: $VMID)..."
+
+# --- TÉLÉCHARGEMENT ---
 URL="https://cloud-images.ubuntu.com/${UBUNTU_CODENAME}/current/${UBUNTU_CODENAME}-server-cloudimg-${UBUNTU_ARCH}.img"
 WORK_FILE="${LOCAL_CACHE_DIR}/ubuntu-${UBUNTU_VERSION}-cloud.img"
 
-if [ -f "$WORK_FILE" ]; then
-  echo -e "\e[32m[OK]\e[0m Image déjà présente localement : $WORK_FILE"
-else
-  echo -e "\e[34m[INFO]\e[0m Téléchargement d'Ubuntu vers le cache..."
-  curl -fL --progress-bar -o "${WORK_FILE}.tmp" "$URL"
+if [[ ! -f "$WORK_FILE" ]]; then
+  echo -e "\e[34m[INFO]\e[0m Téléchargement Ubuntu ${UBUNTU_VERSION}..."
+  if ! curl -L --progress-bar -o "${WORK_FILE}.tmp" "$URL"; then
+    rm -f "${WORK_FILE}.tmp"
+    echo -e "\e[31m[ERREUR]\e[0m Échec du téléchargement : $URL"
+    exit 1
+  fi
   mv "${WORK_FILE}.tmp" "$WORK_FILE"
+else
+  echo -e "\e[32m[OK]\e[0m Image Ubuntu déjà en cache."
 fi
 
-# --- CRÉATION DE LA VM ---
+# --- CRÉATION VM ---
 echo -e "\e[34m[INFO]\e[0m Création de la VM..."
 qm create "$VMID" --name "$HN" --agent 1 --bios ovmf --machine q35 --cpu host \
   --cores "$CPU_CORES" --memory "$RAM_SIZE" --net0 virtio,bridge="$BRIDGE" \
   --ostype l26 --onboot 1 --scsihw virtio-scsi-pci
+VM_CREATED=1
 
 qm set "$VMID" --efidisk0 "${STORAGE}:0,efitype=4m,pre-enrolled-keys=1"
 
-echo -e "\e[34m[INFO]\e[0m Importation du disque virtuel..."
-IMPORT_OUTPUT=$(qm importdisk "$VMID" "$WORK_FILE" "$STORAGE" --format qcow2)
-DISK_VOL=$(echo "$IMPORT_OUTPUT" | grep -oP "Successfully imported disk as '\K[^']+")
+echo -e "\e[34m[INFO]\e[0m Import du disque..."
+qm importdisk "$VMID" "$WORK_FILE" "$STORAGE" --format qcow2
 
-# FIX : cache=writeback ajouté
+# Récupération robuste du volume disque
+DISK_VOL=$(qm config "$VMID" | awk -F: '/^unused0:/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}')
+if [[ -z "$DISK_VOL" ]]; then
+  echo -e "\e[31m[ERREUR]\e[0m Impossible de récupérer le volume disque."
+  exit 1
+fi
+
 qm set "$VMID" --scsi0 "${DISK_VOL},discard=on,ssd=1,cache=writeback" \
   --ide2 "${STORAGE}:cloudinit" --boot order=scsi0 --serial0 socket
 qm resize "$VMID" scsi0 "$DISK_SIZE"
 
-if [ "$START_VM" == "yes" ]; then
+# --- DÉMARRAGE ---
+if [[ "$START_VM" == "yes" ]]; then
   echo -e "\e[34m[INFO]\e[0m Démarrage de la VM..."
   qm start "$VMID"
 fi
-echo -e "\n\e[32m[SUCCÈS]\e[0m VM Ubuntu créée avec succès (ID: $VMID) !"
+
+echo -e "\n\e[32m[SUCCÈS]\e[0m VM Ubuntu $UBUNTU_VERSION créée (ID: $VMID) !"
+echo -e "\e[33m[TIP]\e[0m Connectez-vous via : qm terminal $VMID"
