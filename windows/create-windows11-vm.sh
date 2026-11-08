@@ -1,42 +1,74 @@
 #!/usr/bin/env bash
-# Script de création automatisée VM Windows 11 (Bypass total + VirtIO + BypassNRO)
+# Script de création automatisée VM Windows 11 (Proxmox VE 9.2)
+# Bypass TPM, SecureBoot, RAM + VirtIO + BypassNRO
 set -euo pipefail
 
-# --- 1. CONFIGURATION ---
+# --- CONFIGURATION ---
 VMID_DEFAULT=$(pvesh get /cluster/nextid)
 VMID="${VMID:-$VMID_DEFAULT}"
 HN="${HN:-win11-vm}"
 CPU_CORES="${CPU_CORES:-4}"
 RAM_SIZE="${RAM_SIZE:-4096}"
-DISK_SIZE="${DISK_SIZE:-64}"
+DISK_SIZE="${DISK_SIZE:-64G}"
 STORAGE="${STORAGE:-local-lvm}"
 BRIDGE="${BRIDGE:-vmbr0}"
 START_VM="${START_VM:-yes}"
 
 # À MODIFIER : Nom exact de votre ISO Windows 11
-WINDOWS_ISO="${WINDOWS_ISO:-windows-11-24h2.iso}" 
-ISO_STORAGE="local"
+WINDOWS_ISO="${WINDOWS_ISO:-win11-24h2.iso}"
+ISO_STORAGE="${ISO_STORAGE:-local}"
 LOCAL_CACHE_DIR="/var/lib/vz/template/iso"
 
-echo -e "\e[34m[INFO]\e[0m Début de la création de la VM Windows 11 (ID: $VMID)..."
-
-# --- 2. VÉRIFICATIONS ISO ---
-if [ ! -f "${LOCAL_CACHE_DIR}/${WINDOWS_ISO}" ]; then
-  echo -e "\e[31m[ERREUR]\e[0m L'ISO Windows 11 '${WINDOWS_ISO}' est introuvable dans ${LOCAL_CACHE_DIR}."
+# Validation DISK_SIZE
+if [[ ! "$DISK_SIZE" =~ ^[0-9]+[Gg]$ ]]; then
+  echo -e "\e[31m[ERREUR]\e[0m DISK_SIZE doit être au format '64G' (en Go uniquement)."
   exit 1
 fi
 
+VM_CREATED=0
+TEMP_DIR=""
+
+cleanup() {
+  local exit_code=$?
+  # Nettoyage du dossier temporaire
+  if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
+    rm -rf "$TEMP_DIR"
+  fi
+  # Nettoyage de la VM en cas d'échec
+  if (( exit_code != 0 )) && (( VM_CREATED )); then
+    echo -e "\e[33m[NETTOYAGE]\e[0m Suppression de la VM $VMID..."
+    qm stop "$VMID" >/dev/null 2>&1 || true
+    qm destroy "$VMID" --destroy-unreferenced-disks 1 --purge 1 >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+echo -e "\e[34m[INFO]\e[0m Début de la création de la VM Windows 11 (ID: $VMID)..."
+
+# --- VÉRIFICATIONS ISO ---
+if [[ ! -f "${LOCAL_CACHE_DIR}/${WINDOWS_ISO}" ]]; then
+  echo -e "\e[31m[ERREUR]\e[0m L'ISO Windows 11 '${WINDOWS_ISO}' est introuvable dans ${LOCAL_CACHE_DIR}."
+  echo -e "\e[31m[ERREUR]\e[0m Veuillez placer votre ISO dans ce dossier avant de continuer."
+  exit 1
+fi
+
+# Téléchargement des pilotes VirtIO
 VIRTIO_URL="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 VIRTIO_FILE="virtio-win-stable.iso"
 
-if [ ! -f "${LOCAL_CACHE_DIR}/${VIRTIO_FILE}" ]; then
+if [[ ! -f "${LOCAL_CACHE_DIR}/${VIRTIO_FILE}" ]]; then
   echo -e "\e[34m[INFO]\e[0m Téléchargement du CD des pilotes VirtIO..."
-  curl -fL --progress-bar -o "${LOCAL_CACHE_DIR}/${VIRTIO_FILE}.tmp" "$VIRTIO_URL"
+  if ! curl -L --progress-bar -o "${LOCAL_CACHE_DIR}/${VIRTIO_FILE}.tmp" "$VIRTIO_URL"; then
+    rm -f "${LOCAL_CACHE_DIR}/${VIRTIO_FILE}.tmp"
+    echo -e "\e[31m[ERREUR]\e[0m Échec du téléchargement : $VIRTIO_URL"
+    exit 1
+  fi
   mv "${LOCAL_CACHE_DIR}/${VIRTIO_FILE}.tmp" "${LOCAL_CACHE_DIR}/${VIRTIO_FILE}"
 fi
 
-# --- 3. GÉNÉRATION DE LA CLÉ USB VIRTUELLE (autounattend.xml) ---
+# --- GÉNÉRATION DE LA CLÉ USB VIRTUELLE (autounattend.xml) ---
 echo -e "\e[34m[INFO]\e[0m Génération du fichier de réponse automatisé (Bypass MSA & TPM)..."
+
 TEMP_DIR=$(mktemp -d)
 IMG_FILE="${TEMP_DIR}/unattend.img"
 
@@ -53,7 +85,7 @@ cat << 'EOF' > "${TEMP_DIR}/autounattend.xml"
         <AcceptEula>true</AcceptEula>
       </UserData>
       <RunSynchronous>
-        <!-- Bypass strict des vérifications matérielles Win11 (CPU/TPM/RAM/Disque/SecureBoot) -->
+        <!-- Bypass strict des vérifications matérielles Win11 -->
         <RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>reg add HKLM\System\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
         <RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>reg add HKLM\System\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
         <RunSynchronousCommand wcm:action="add"><Order>3</Order><Path>reg add HKLM\System\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
@@ -69,17 +101,15 @@ cat << 'EOF' > "${TEMP_DIR}/autounattend.xml"
         <PathAndCredentials wcm:action="add" wcm:keyValue="4"><Path>D:\NetKVM\w11\amd64</Path></PathAndCredentials>
         <PathAndCredentials wcm:action="add" wcm:keyValue="5"><Path>E:\NetKVM\w11\amd64</Path></PathAndCredentials>
         <PathAndCredentials wcm:action="add" wcm:keyValue="6"><Path>F:\NetKVM\w11\amd64</Path></PathAndCredentials>
-        <!-- Fallback sur Windows 10 si pilotes w11 absents -->
         <PathAndCredentials wcm:action="add" wcm:keyValue="7"><Path>D:\vioscsi\w10\amd64</Path></PathAndCredentials>
         <PathAndCredentials wcm:action="add" wcm:keyValue="8"><Path>E:\vioscsi\w10\amd64</Path></PathAndCredentials>
       </DriverPaths>
     </component>
   </settings>
-  
+
   <settings pass="specialize">
     <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <RunSynchronous>
-        <!-- CORRECTION CRITIQUE 24H2 : Force Windows à proposer le compte local sans internet -->
         <RunSynchronousCommand wcm:action="add">
           <Order>1</Order>
           <Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path>
@@ -130,27 +160,17 @@ EOF
 sed -i 's/$/\r/' "${TEMP_DIR}/autounattend.xml"
 
 mkdir -p "${TEMP_DIR}/mnt"
-
-# FIX : Nettoyage 100% sécurisé (Même en cas de crash/Ctrl+C)
-cleanup() {
-  if mountpoint -q "${TEMP_DIR}/mnt" 2>/dev/null; then
-    sync; sleep 1; umount -l "${TEMP_DIR}/mnt" || true
-  fi
-  rm -rf "${TEMP_DIR}"
-}
-trap cleanup EXIT ERR
-
 mount -o loop "$IMG_FILE" "${TEMP_DIR}/mnt"
 cp "${TEMP_DIR}/autounattend.xml" "${TEMP_DIR}/mnt/"
-sync; sleep 1; umount "${TEMP_DIR}/mnt"
+sync
+sleep 1
+umount "${TEMP_DIR}/mnt"
 
 UNATTEND_FINAL="${LOCAL_CACHE_DIR}/unattend-${VMID}.img"
 mv "$IMG_FILE" "$UNATTEND_FINAL"
 chmod 644 "$UNATTEND_FINAL"
 
-# Le trap "cleanup" supprimera proprement le dossier temporaire qui est désormais vide.
-
-# --- 4. CRÉATION DE LA VM (QM) ---
+# --- CRÉATION DE LA VM ---
 echo -e "\e[34m[INFO]\e[0m Création de la VM Windows 11..."
 
 qm create "$VMID" \
@@ -164,28 +184,31 @@ qm create "$VMID" \
   --net0 virtio,bridge="$BRIDGE" \
   --ostype win11 \
   --scsihw virtio-scsi-pci
+VM_CREATED=1
 
 qm set "$VMID" --tpmstate0 "${STORAGE}:0,version=v2.0"
 qm set "$VMID" --efidisk0 "${STORAGE}:0,efitype=4m,pre-enrolled-keys=1"
 
-# FIX : Optimisation "cache=writeback" pour booster l'installation
+# Optimisation cache=writeback
 qm set "$VMID" --scsi0 "${STORAGE}:${DISK_SIZE},discard=on,ssd=1,cache=writeback"
 
 # Attachement des ISOs
 qm set "$VMID" --ide0 "${ISO_STORAGE}:iso/${WINDOWS_ISO},media=cdrom"
 qm set "$VMID" --ide2 "${ISO_STORAGE}:iso/${VIRTIO_FILE},media=cdrom"
 
-# Injection de la clé USB d'automatisation
-qm set "$VMID" --args "-drive file=${UNATTEND_FINAL},format=raw,if=none,id=drive-usb-unattend,readonly=on -device usb-storage,drive=drive-usb-unattend"
+# CORRECTION : Utilisation de --usb pour attacher la clé virtuelle
+# On crée un device USB pointant vers l'image
+qm set "$VMID" --usb0 "usb3,storage=${UNATTEND_FINAL},id=usb-unattend"
 
 # Ordre de boot (CD en premier, puis le disque)
 qm set "$VMID" --boot "order=ide0;scsi0"
 
-# --- 5. DÉMARRAGE ---
-if [ "$START_VM" == "yes" ]; then
-  echo -e "\e[34m[INFO]\e[0m Démarrage de la VM dans 3 secondes..."
-  sleep 3
+# --- DÉMARRAGE ---
+if [[ "$START_VM" == "yes" ]]; then
+  echo -e "\e[34m[INFO]\e[0m Démarrage de la VM..."
   qm start "$VMID"
 fi
 
 echo -e "\n\e[32m[SUCCÈS]\e[0m VM Windows 11 préparée avec succès (ID: $VMID) !"
+echo -e "\e[33m[IMPORTANT]\e[0m Mot de passe temporaire : Proxmox2026!"
+echo -e "\e[33m[IMPORTANT]\e[0m Modifiez-le immédiatement après la première connexion."
