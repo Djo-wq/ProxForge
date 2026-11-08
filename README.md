@@ -5,7 +5,6 @@
 ██║     ██║  ██║╚██████╔╝██╔╝ ██╗██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
 ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
 
-</div>
 
 **⚡ Déployez des machines virtuelles Linux, Windows, des pare-feux OPNsense et des conteneurs LXC/Docker sur Proxmox VE : entièrement automatisé, optimisé et sans dépendance externe.**
 
