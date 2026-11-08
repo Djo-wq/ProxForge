@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Script de création automatisée VM Windows Server avec Injection VirtIO (Optimisé)
+# Script de création automatisée VM Windows Server 2025 avec Injection VirtIO (Optimisé)
 set -euo pipefail
 
 # --- 1. CONFIGURATION ---
 VMID_DEFAULT=$(pvesh get /cluster/nextid)
 VMID="${VMID:-$VMID_DEFAULT}"
-HN="${HN:-windows-server}"
+HN="${HN:-win-server-2025}"
 CPU_CORES="${CPU_CORES:-4}"
 RAM_SIZE="${RAM_SIZE:-4096}"
 DISK_SIZE="${DISK_SIZE:-60}"
@@ -13,12 +13,12 @@ STORAGE="${STORAGE:-local-lvm}"
 BRIDGE="${BRIDGE:-vmbr0}"
 START_VM="${START_VM:-yes}"
 
-# À MODIFIER : Nom exact de votre fichier ISO Windows présent sur Proxmox
+# À MODIFIER : Nom exact de votre fichier ISO Windows Server 2025 présent sur Proxmox
 WINDOWS_ISO="${WINDOWS_ISO:-windows-server-2025.iso}" 
 ISO_STORAGE="local"
 LOCAL_CACHE_DIR="/var/lib/vz/template/iso"
 
-echo -e "\e[34m[INFO]\e[0m Début de la création de la VM Windows (ID: $VMID)..."
+echo -e "\e[34m[INFO]\e[0m Début de la création de la VM Windows Server 2025 (ID: $VMID)..."
 
 # --- 2. VÉRIFICATIONS ISO ---
 if [ ! -f "${LOCAL_CACHE_DIR}/${WINDOWS_ISO}" ]; then
@@ -105,12 +105,12 @@ cat << 'EOF' > "${TEMP_DIR}/autounattend.xml"
 </unattend>
 EOF
 
-# FIX : Conversion CRLF pour que Windows lise le fichier XML sans erreur de parsing
+# Conversion CRLF pour que Windows lise le fichier XML sans erreur de parsing
 sed -i 's/$/\r/' "${TEMP_DIR}/autounattend.xml"
 
 mkdir -p "${TEMP_DIR}/mnt"
 
-# FIX : Démontage propre et forcé via fonction
+# Démontage propre et forcé via fonction
 cleanup() {
   if mountpoint -q "${TEMP_DIR}/mnt"; then
     sync
@@ -126,15 +126,15 @@ cp "${TEMP_DIR}/autounattend.xml" "${TEMP_DIR}/mnt/"
 sync
 sleep 1
 umount "${TEMP_DIR}/mnt"
-trap - EXIT ERR # Annulation du trap une fois démonté proprement
+trap - EXIT ERR 
 
 UNATTEND_FINAL="${LOCAL_CACHE_DIR}/unattend-${VMID}.img"
 mv "$IMG_FILE" "$UNATTEND_FINAL"
-chmod 644 "$UNATTEND_FINAL" # FIX : Droits pour l'accès QEMU KVM
+chmod 644 "$UNATTEND_FINAL"
 rm -rf "${TEMP_DIR}"
 
 # --- 4. CRÉATION DE LA VM (QM) ---
-echo -e "\e[34m[INFO]\e[0m Création de la VM Windows..."
+echo -e "\e[34m[INFO]\e[0m Création de la VM Windows Server..."
 
 qm create "$VMID" \
   --name "$HN" \
@@ -151,14 +151,14 @@ qm create "$VMID" \
 qm set "$VMID" --tpmstate0 "${STORAGE}:0,version=v2.0"
 qm set "$VMID" --efidisk0 "${STORAGE}:0,efitype=4m,pre-enrolled-keys=1"
 
-# FIX : Optimisation Writeback pour Windows
+# Optimisation Writeback pour Windows
 qm set "$VMID" --scsi0 "${STORAGE}:${DISK_SIZE},discard=on,ssd=1,cache=writeback"
 
 # Attachement des ISOs
 qm set "$VMID" --ide0 "${ISO_STORAGE}:iso/${WINDOWS_ISO},media=cdrom"
 qm set "$VMID" --ide2 "${ISO_STORAGE}:iso/${VIRTIO_FILE},media=cdrom"
 
-# Injection de la fausse clé USB
+# Injection de la clé USB virtuelle
 qm set "$VMID" --args "-drive file=${UNATTEND_FINAL},format=raw,if=none,id=drive-usb-unattend,readonly=on -device usb-storage,drive=drive-usb-unattend"
 
 # Boot order
@@ -170,4 +170,4 @@ if [ "$START_VM" == "yes" ]; then
   qm start "$VMID"
 fi
 
-echo -e "\n\e[32m[SUCCÈS]\e[0m VM Windows (ID: $VMID) prête pour l'installation automatisée !"
+echo -e "\n\e[32m[SUCCÈS]\e[0m VM Windows Server 2025 (ID: $VMID) prête pour l'installation automatisée !"
