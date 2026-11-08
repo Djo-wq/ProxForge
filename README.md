@@ -1,21 +1,24 @@
+<div align="center">
+
+```text
 ██████╗ ██████╗  ██████╗ ██╗  ██╗███████╗ ██████╗ ██████╗  ██████╗ ███████╗
 ██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
 ███████║██████╔╝██║   ██║ ╚███╔╝ █████╗  ██║   ██║██████╔╝██║  ███╗█████╗  
 ██║     ██╔══██║██║   ██║ ██╔██╗ ██╔══╝  ██║   ██║██╔══██║██║   ██║██╔══╝  
 ██║     ██║  ██║╚██████╔╝██╔╝ ██╗██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
 ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+```
 
-
-**⚡ Déployez des machines virtuelles Linux, Windows, des pare-feux OPNsense et des conteneurs LXC/Docker sur Proxmox VE : entièrement automatisé, optimisé et sans dépendance externe.**
+**⚡ Déployez des machines virtuelles Linux et Windows, des pare-feux OPNsense, des LXC applicatifs et des conteneurs Docker sur Proxmox VE 9.2 : entièrement automatisé, robuste et sans dépendance externe.**
 
 ```bash
 $ ssh root@proxmox
-$ ./proxforge --deploy <linux|lxc|windows|opnsense|docker>
+$ ./proxforge --deploy <linux|windows|opnsense|docker>
 ```
 
 ![Bash](https://img.shields.io/badge/langage-Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
-![Proxmox VE](https://img.shields.io/badge/Proxmox_VE-7.x%20%7C%208.x%20%7C%209.2-E57000?style=for-the-badge&logo=proxmox&logoColor=white)
-![Zéro dépendance](https://img.shields.io/badge/zéro_dépendance-00C853?style=for-the-badge)
+![Proxmox VE](https://img.shields.io/badge/Proxmox_VE-9.2%20%7C%20Debian%2013-E57000?style=for-the-badge&logo=proxmox&logoColor=white)
+![Zéro dépendance](https://img.shields.io/badge/z%C3%A9ro_d%C3%A9pendance-00C853?style=for-the-badge)
 ![Licence](https://img.shields.io/badge/licence-MIT-212121?style=for-the-badge)
 
 </div>
@@ -24,29 +27,29 @@ $ ./proxforge --deploy <linux|lxc|windows|opnsense|docker>
 
 ## 📚 Sommaire
 
-- [📌 À propos](#-à-propos)
-- [✨ Fonctionnalités](#-fonctionnalités)
-- [📋 Prérequis](#-prérequis)
-- [🚀 Déploiement](#-déploiement)
-- [🔧 Personnalisation](#-personnalisation)
-- [🔒 Sécurité](#-sécurité)
-- [📝 Changelog](#-changelog)
-- [📜 Licence](#-licence)
+- [📌 À propos](#à-propos)
+- [✨ Fonctionnalités](#fonctionnalités)
+- [📋 Prérequis](#prérequis)
+- [🗂️ Structure du projet](#structure-du-projet)
+- [🚀 Déploiement](#déploiement)
+- [🔧 Personnalisation](#personnalisation)
+- [🔒 Sécurité](#sécurité)
+- [📜 Licence](#licence)
 
 ---
 
-## 📌 À propos
+## À propos
 
-**ProxForge** est une collection de **scripts Bash autonomes (standalone)** conçus spécifiquement pour **Proxmox VE 7.x / 8.x / 9.2** (basé sur Debian 13 "Trixie").
+ProxForge est une collection de **scripts Bash autonomes (standalone)** conçus spécifiquement pour **Proxmox VE 9.2** (Debian 13 « Trixie »).
 
 Contrairement aux solutions qui reposent sur des frameworks externes, ProxForge automatise l'intégralité du cycle de déploiement **directement depuis le shell de votre nœud Proxmox** : aucune infrastructure supplémentaire, aucun agent, aucune configuration complexe.
 
 > [!IMPORTANT]
-> Les scripts interagissent directement avec l'API CLI de Proxmox (`qm`, `pct`, `pvesm`, `pvesh`). Vous devez impérativement les exécuter en tant que **`root`** dans le shell de votre nœud Proxmox.
+> Les scripts interagissent directement avec l'API CLI de Proxmox (`qm`, `pct`, `pveam`, `pvesh`). Vous devez impérativement les exécuter en tant que **`root`** dans le shell de votre nœud Proxmox.
 
 ---
 
-## ✨ Fonctionnalités
+## Fonctionnalités
 
 | | Fonctionnalité | Description |
 | :---: | --- | --- |
@@ -54,21 +57,63 @@ Contrairement aux solutions qui reposent sur des frameworks externes, ProxForge 
 | 💾 | **Cache local intelligent** | Les images Cloud (`.qcow2`, `.img`) sont téléchargées puis mises en cache dans `/var/lib/vz/template/iso/` pour accélérer les déploiements futurs. |
 | 🪟 | **Windows automatisé** | Génère une disquette/USB virtuelle avec `autounattend.xml` pour contourner les restrictions matérielles (TPM, Secure Boot, RAM) et injecter les pilotes VirtIO en silence. |
 | ⚡ | **Performances optimisées** | Configurations de stockage robustes avec l'option de cache `writeback` et sécurités UEFI/OVMF préconfigurées. |
-| 🔧 | **Gestion d'erreurs robuste** | Validation systématique, cleanup automatique en cas d'échec, parsing robuste des volumes disque. |
-| 🛡️ | **Sécurité renforcée** | Vérification root, validation des commandes, mot de passe par défaut sécurisé. |
-| 📊 | **Messages clairs** | Sorties colorées et informatives pour un suivi facile de l'exécution. |
+| ✅ | **Validations précoces** | Contrôle des privilèges `root` et des commandes requises avant toute action, avec `set -euo pipefail` en tête de chaque script. |
+| 🧯 | **Auto-nettoyage** | En cas d'échec en cours de déploiement, la VM ou le conteneur partiellement créé est automatiquement supprimé : aucun déploiement fantôme. |
+| 🌐 | **LXC prêts à l'emploi** | Attente de l'IP DHCP, installation silencieuse de l'application et affichage de l'URL d'accès à la fin du script. |
 
 ---
 
-## 📋 Prérequis
+## Prérequis
 
-- Un nœud **Proxmox VE 7.x, 8.x ou 9.2** opérationnel.
+- Un nœud **Proxmox VE 9.2** (Debian 13 « Trixie ») opérationnel.
 - Un accès **root** au shell du nœud.
-- *(VM Windows uniquement)* Votre fichier `.iso` placé dans le stockage **local → ISO Images** de Proxmox.
+- *(VM Windows uniquement)* votre fichier `.iso` placé dans le stockage Proxmox (voir la note Windows dans la section [Déploiement](#déploiement)).
 
 ---
 
-## 🚀 Déploiement
+## Structure du projet
+
+Tous les scripts suivent la même structure standardisée : validations en amont, variables surchargeables, nettoyage automatique en cas d'échec et messages colorés.
+
+```text
+ProxForge/
+├── linux/                          # VM Cloud-Init
+│   ├── create-ubuntu-vm.sh
+│   ├── create-debian-vm.sh
+│   ├── create-kali-vm.sh
+│   ├── create-arch-linux-vm.sh
+│   └── create-fedora-vm.sh
+├── lxc/                            # Conteneurs applicatifs
+│   ├── Adblock & DNS/
+│   │   ├── create-adguard-lxc.sh
+│   │   ├── create-pihole-lxc.sh
+│   │   ├── create-powerdns-lxc.sh
+│   │   └── create-technitium-lxc.sh
+│   ├── Databases/
+│   │   ├── create-mariadb-lxc.sh
+│   │   ├── create-mongodb-lxc.sh
+│   │   └── create-postgresql-lxc.sh
+│   ├── Media & Streaming/
+│   │   ├── create-immich-lxc.sh
+│   │   └── create-jellyfin-lxc.sh
+│   └── Remote Access & VPN/
+│       ├── create-Cloudflared-lxc.sh
+│       ├── create-netbird-lxc.sh
+│       ├── create-Tailscale-lxc.sh
+│       └── create-wireguard-lxc.sh
+├── windows/                        # VM Windows
+│   ├── create-windows11-vm.sh
+│   ├── create-win10-vm.sh
+│   └── create-winserver2025-vm.sh
+├── opnsense/
+│   └── create-opnsense-vm.sh
+└── docker/
+    └── create-docker-lxc.sh
+```
+
+---
+
+## Déploiement
 
 Commencez par cloner le dépôt sur votre nœud Proxmox :
 
@@ -79,75 +124,8 @@ cd ProxForge
 
 ### 🐧 Machines virtuelles Linux
 
-#### Ubuntu
-
 ```bash
 bash linux/create-ubuntu-vm.sh
-```
-
-#### Debian
-
-```bash
-bash linux/create-debian-vm.sh
-```
-
-#### Fedora
-
-```bash
-bash linux/create-fedora-vm.sh
-```
-
-#### Kali Linux
-
-```bash
-bash linux/create-kali-vm.sh
-```
-
-#### Arch Linux
-
-```bash
-bash linux/create-arch-linux-vm.sh
-```
-
-### 📦 Conteneurs LXC
-
-#### Docker
-
-```bash
-bash lxc/create-docker-lxc.sh
-```
-
-#### Adblock & DNS
-
-```bash
-bash "lxc/Adblock &DNS/create-pihole-lxc.sh"
-bash "lxc/Adblock &DNS/create-adguard-lxc.sh"
-bash "lxc/Adblock &DNS/create-powerdns-lxc.sh"
-bash "lxc/Adblock &DNS/create-technitium-lxc.sh"
-```
-
-#### Bases de données
-
-```bash
-bash lxc/Databases/create-mariadb-lxc.sh
-bash lxc/Databases/create-mongodb-lxc.sh
-bash lxc/Databases/create-postgresql-lxc.sh
-```
-
-#### Media & Streaming
-
-```bash
-bash "lxc/Media &Streaming/create-immich-lxc.sh"
-bash "lxc/Media &Streaming/create-jellyfin-lxc.sh"
-```
-
-#### Accès à distance & VPN
-
-```bash
-bash "lxc/Remote Access &VPN/create-wireguard-lxc.sh"
-bash "lxc/Remote Access &VPN/create-Cloudflared-lxc.sh"
-bash "lxc/Remote Access &VPN/create-netbird-lxc.sh"
-bash "lxc/Remote Access &VPN/create-Tailscale-lxc.sh"
 ```
 
 ### 🪟 Machines virtuelles Windows
@@ -157,8 +135,6 @@ bash "lxc/Remote Access &VPN/create-Tailscale-lxc.sh"
 
 ```bash
 bash windows/create-windows11-vm.sh
-bash windows/create-win10-vm.sh
-bash windows/create-winserver2025-vm.sh
 ```
 
 ### 🛡️ Pare-feux OPNsense
@@ -167,84 +143,63 @@ bash windows/create-winserver2025-vm.sh
 bash opnsense/create-opnsense-vm.sh
 ```
 
+### 📦 Conteneurs LXC applicatifs
+
+```bash
+bash "lxc/Adblock & DNS/create-pihole-lxc.sh"
+bash "lxc/Databases/create-postgresql-lxc.sh"
+bash "lxc/Remote Access & VPN/create-wireguard-lxc.sh"
+```
+
+### 🐳 Conteneurs Docker
+
+```bash
+bash docker/create-docker-lxc.sh
+```
+
 ---
 
-## 🔧 Personnalisation
+## Personnalisation
 
-Surchargez les variables d'environnement à la volée :
-
-### Pour les VM (`qm`)
+Surchargez les variables d'environnement à la volée, directement avant d'exécuter un script, pour adapter les ressources à vos besoins :
 
 ```bash
-VMID=100 CPU_CORES=8 RAM_SIZE=16384 DISK_SIZE=100G STORAGE=local-zfs bash linux/create-ubuntu-vm.sh
+CPU_CORES=8 RAM_SIZE=16384 DISK_SIZE=100G STORAGE=local-zfs bash linux/create-ubuntu-vm.sh
 ```
-
-### Pour les LXC (`pct`)
-
-```bash
-CTID=200 CPU_CORES=4 RAM_SIZE=4096 DISK_SIZE=50G STORAGE=local-lvm bash lxc/create-docker-lxc.sh
-```
-
-### Variables générales
 
 | Variable | Description | Valeur par défaut |
 | --- | --- | --- |
-| `VMID` / `CTID` | Identifiant unique | Incrément automatique (`nextid`) |
-| `HN` | Nom de la machine | `<distro>-vm-<id>` ou `<service>-lxc-<id>` |
-| `CPU_CORES` | Nombre de vCPUs | `2` (Linux) / `4` (Windows, OPNsense) |
+| `VMID` / `CTID` | Identifiant unique de la machine | Incrément automatique (`nextid`) |
+| `CPU_CORES` | Nombre de vCPUs alloués | `2` (Linux) / `4` (Windows, OPNsense) |
 | `RAM_SIZE` | Mémoire vive (Mo) | `2048` (2 Go) |
-| `DISK_SIZE` | Taille du disque | `8G` – `20G` selon le service |
-| `STORAGE` | Stockage Proxmox | `local-lvm` |
-| `BRIDGE` | Pont réseau | `vmbr0` |
-| `START_VM` / `START_LXC` | Démarrer après création | `yes` |
-| `TEMPLATE_STORAGE` | Stockage des templates | `local` |
+| `DISK_SIZE` | Taille du disque virtuel | `20G` – `64G` |
+| `STORAGE` | Stockage Proxmox cible | `local-lvm` |
+| `BRIDGE` | Pont réseau virtuel | `vmbr0` |
+| `CIUSER` | Utilisateur Cloud-Init créé dans la VM | `admin` |
+| `SSH_PUBKEY_FILE` | Clé publique SSH à injecter (ex. `/root/.ssh/id_ed25519.pub`) | *(vide)* |
+| `CIPASSWORD` | Mot de passe initial Cloud-Init | *(vide)* |
+| `IPCONFIG0` | Configuration réseau Cloud-Init | `ip=dhcp` |
+| `TEMPLATE_STORAGE` | Stockage des templates LXC (`pveam`) | `local` |
+| `START_VM` / `START_LXC` | Démarrage automatique après création | `yes` |
 
-### Variables Cloud-Init (Linux)
-
-| Variable | Description | Valeur par défaut |
-| --- | --- | --- |
-| `CIUSER` | Utilisateur créé | `admin` |
-| `CIPASSWORD` | Mot de passe | *Aucun (à configurer)* |
-| `SSH_PUBKEY_FILE` | Clé SSH publique | *Aucun* |
-| `IPCONFIG0` | Configuration réseau | `ip=dhcp` |
+> [!TIP]
+> Pour les VM Cloud-Init, privilégiez `SSH_PUBKEY_FILE` plutôt que `CIPASSWORD` : un mot de passe passé en variable d'environnement transite brièvement en clair dans la liste des processus.
 
 ---
 
-## 🔒 Sécurité
+## Sécurité
 
 > [!WARNING]
-> **Comptes par défaut :** Mot de passe temporaire pour Windows, Pi-hole, AdGuard, MariaDB, MongoDB, PostgreSQL et WGDashboard :
+> **Comptes automatisés** : les scripts de déploiement Windows, ainsi que les applications installées automatiquement dans les LXC (ex. Pi-hole), créent par défaut un compte administrateur avec le mot de passe temporaire :
 >
-> ```text
+> ```
 > Proxmox2026!
 > ```
 >
-> **Modifiez-le immédiatement** après la première connexion.
+> Veillez à **modifier ce mot de passe immédiatement** après votre première connexion (session Windows ou interface web de l'application).
 
 ---
 
-## 📝 Changelog
+## Licence
 
-### ✅ Version 1.1.0 (Novembre 2025) — Corrections majeures
-
-#### Améliorations générales (TOUS les scripts)
-
-- ✅ Validation root systématique.
-- ✅ Validation des commandes nécessaires.
-- ✅ Cleanup automatique en cas d'erreur (`trap`).
-- ✅ Parsing robuste (remplace `grep -oP`).
-- ✅ Gestion des erreurs améliorée.
-- ✅ Messages colorés standardisés.
-- ✅ Création automatique des répertoires (`mkdir -p`).
-
-#### Scripts corrigés
-
-- **Linux (5)** : `create-ubuntu-vm.sh`, `create-debian-vm.sh`, `create-kali-vm.sh`, `create-arch-linux-vm.sh`, `create-fedora-vm.sh`.
-- **LXC (14)** : Tous les scripts des dossiers Adblock & DNS, Databases, Media & Streaming, Remote Access & VPN.
-- **À corriger** : Windows (3), OPNsense (1).
-
----
-
-## 📜 Licence
-
-**MIT** — Libre d'utiliser, modifier et redistribuer.
+Ce projet est distribué sous licence **MIT**. Vous êtes libre de l'utiliser, de le modifier et de le redistribuer, à des fins personnelles comme commerciales.
