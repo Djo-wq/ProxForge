@@ -1,11 +1,30 @@
 #!/usr/bin/env bash
-# Script de création automatisée VM Ubuntu Cloud-Init (Proxmox VE 9.2)
+# ProxForge — Création automatisée d'une VM Ubuntu Cloud-Init (Optimisé pour Proxmox VE 9.2)
 set -euo pipefail
 
-# --- CONFIGURATION ---
-VMID_DEFAULT=$(pvesh get /cluster/nextid)
+# ============================================================================
+# 1. VALIDATIONS PRÉCOCES
+# ============================================================================
+
+if [[ $EUID -ne 0 ]]; then
+  echo -e "\e[31m[ERREUR]\e[0m Ce script doit être exécuté en tant que root." >&2
+  exit 1
+fi
+
+for cmd in curl qm pvesh awk; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo -e "\e[31m[ERREUR]\e[0m La commande '$cmd' est requise mais introuvable." >&2
+    exit 1
+  fi
+done
+
+# ============================================================================
+# 2. CONFIGURATION
+# ============================================================================
+
+VMID_DEFAULT=$(pvesh get /cluster/nextid 2>/dev/null || echo "1000")
 VMID="${VMID:-$VMID_DEFAULT}"
-HN="${HN:-ubuntu-vm}"
+HN="${HN:-ubuntu-vm-$VMID}"
 CPU_CORES="${CPU_CORES:-2}"
 RAM_SIZE="${RAM_SIZE:-2048}"
 DISK_SIZE="${DISK_SIZE:-20G}"
@@ -14,84 +33,85 @@ BRIDGE="${BRIDGE:-vmbr0}"
 START_VM="${START_VM:-yes}"
 UBUNTU_VERSION="${UBUNTU_VERSION:-24.04}"
 
-# Validation DISK_SIZE (doit finir par G ou être un nombre)
-if [[ ! "$DISK_SIZE" =~ ^[0-9]+[GgMm]?$ && ! "$DISK_SIZE" =~ ^[0-9]+$ ]]; then
-  echo -e "\e[31m[ERREUR]\e[0m DISK_SIZE doit être au format '20G', '50M' ou '100' (Go)."
-  exit 1
-fi
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64) UBUNTU_ARCH="amd64" ;;
+  aarch64) UBUNTU_ARCH="arm64" ;;
+  *) echo -e "\e[31m[ERREUR]\e[0m Architecture '$ARCH' non supportée." >&2; exit 1 ;;
+esac
 
-# Mapping versions Ubuntu (LTS uniquement pour Proxmox 9.2)
 case "$UBUNTU_VERSION" in
   24.04) UBUNTU_CODENAME="noble" ;;
   22.04) UBUNTU_CODENAME="jammy" ;;
   20.04) UBUNTU_CODENAME="focal" ;;
-  *) echo -e "\e[31m[ERREUR]\e[0m Version Ubuntu non supportée. Utilisez 20.04, 22.04 ou 24.04."; exit 1 ;;
+  18.04) UBUNTU_CODENAME="bionic" ;;
+  *) echo -e "\e[31m[ERREUR]\e[0m Version Ubuntu '$UBUNTU_VERSION' non supportée." >&2; exit 1 ;;
 esac
 
-ARCH=$(uname -m)
-UBUNTU_ARCH="amd64"
-[[ "$ARCH" == "aarch64" ]] && UBUNTU_ARCH="arm64"
+# ============================================================================
+# 3. CACHE ET NETTOYAGE
+# ============================================================================
 
 LOCAL_CACHE_DIR="/var/lib/vz/template/iso"
+mkdir -p "$LOCAL_CACHE_DIR"
+
 VM_CREATED=0
 
 cleanup() {
   local exit_code=$?
-  rm -f "${LOCAL_CACHE_DIR}"/ubuntu-*.tmp 2>/dev/null || true
+  rm -f "${LOCAL_CACHE_DIR}"/*.tmp 2>/dev/null || true
   if (( exit_code != 0 )) && (( VM_CREATED )); then
-    echo -e "\e[33m[NETTOYAGE]\e[0m Suppression de la VM $VMID..."
     qm stop "$VMID" >/dev/null 2>&1 || true
     qm destroy "$VMID" --destroy-unreferenced-disks 1 --purge 1 >/dev/null 2>&1 || true
   fi
 }
-trap cleanup EXIT
 
-echo -e "\e[34m[INFO]\e[0m Création VM Ubuntu $UBUNTU_VERSION (ID: $VMID)..."
+trap cleanup EXIT ERR
 
-# --- TÉLÉCHARGEMENT ---
+# ============================================================================
+# 4. TÉLÉCHARGEMENT
+# ============================================================================
+
+WORK_FILE="${LOCAL_CACHE_DIR}/ubuntu-${UBUNTU_VERSION}-cloud-${UBUNTU_ARCH}.img"
 URL="https://cloud-images.ubuntu.com/${UBUNTU_CODENAME}/current/${UBUNTU_CODENAME}-server-cloudimg-${UBUNTU_ARCH}.img"
-WORK_FILE="${LOCAL_CACHE_DIR}/ubuntu-${UBUNTU_VERSION}-cloud.img"
 
-if [[ ! -f "$WORK_FILE" ]]; then
-  echo -e "\e[34m[INFO]\e[0m Téléchargement Ubuntu ${UBUNTU_VERSION}..."
-  if ! curl -L --progress-bar -o "${WORK_FILE}.tmp" "$URL"; then
-    rm -f "${WORK_FILE}.tmp"
-    echo -e "\e[31m[ERREUR]\e[0m Échec du téléchargement : $URL"
-    exit 1
+if [[ -f "$WORK_FILE" ]]; then
+  echo -e "\e[32m[OK]\e[0m Image Ubuntu déjà présente: $WORK_FILE"
+else
+  echo -e "\e[34m[INFO]\e[0m Téléchargement de l'image Ubuntu ${UBUNTU_VERSION}..."
+  if ! curl -fL --progress-bar -o "${WORK_FILE}.tmp" "$URL"; then
+    echo -e "\e[31m[ERREUR]\e[0m Échec du téléchargement." >&2; exit 1
   fi
   mv "${WORK_FILE}.tmp" "$WORK_FILE"
-else
-  echo -e "\e[32m[OK]\e[0m Image Ubuntu déjà en cache."
 fi
 
-# --- CRÉATION VM ---
-echo -e "\e[34m[INFO]\e[0m Création de la VM..."
+# ============================================================================
+# 5. CRÉATION VM
+# ============================================================================
+
+echo -e "\e[34m[INFO]\e[0m Création de la VM (ID: $VMID)..."
 qm create "$VMID" --name "$HN" --agent 1 --bios ovmf --machine q35 --cpu host \
   --cores "$CPU_CORES" --memory "$RAM_SIZE" --net0 virtio,bridge="$BRIDGE" \
-  --ostype l26 --onboot 1 --scsihw virtio-scsi-pci
-VM_CREATED=1
+  --ostype l26 --onboot 1 --scsihw virtio-scsi-pci --description "Ubuntu ${UBUNTU_VERSION} - ProxForge"
 
+VM_CREATED=1
 qm set "$VMID" --efidisk0 "${STORAGE}:0,efitype=4m,pre-enrolled-keys=1"
 
-echo -e "\e[34m[INFO]\e[0m Import du disque..."
-qm importdisk "$VMID" "$WORK_FILE" "$STORAGE" --format qcow2
-
-# Récupération robuste du volume disque
-DISK_VOL=$(qm config "$VMID" | awk -F: '/^unused0:/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}')
-if [[ -z "$DISK_VOL" ]]; then
-  echo -e "\e[31m[ERREUR]\e[0m Impossible de récupérer le volume disque."
-  exit 1
+echo -e "\e[34m[INFO]\e[0m Importation du disque..."
+if ! qm importdisk "$VMID" "$WORK_FILE" "$STORAGE" --format qcow2 >/dev/null 2>&1; then
+  echo -e "\e[31m[ERREUR]\e[0m Échec de l'importation." >&2; exit 1
 fi
+
+DISK_VOL=$(qm config "$VMID" | awk '/^unused0:/ {sub(/^unused0:[[:space:]]*/, ""); print; exit}')
+[[ -z "$DISK_VOL" ]] && { echo -e "\e[31m[ERREUR]\e[0m Disque introuvable." >&2; exit 1; }
 
 qm set "$VMID" --scsi0 "${DISK_VOL},discard=on,ssd=1,cache=writeback" \
   --ide2 "${STORAGE}:cloudinit" --boot order=scsi0 --serial0 socket
-qm resize "$VMID" scsi0 "$DISK_SIZE"
+qm resize "$VMID" scsi0 "$DISK_SIZE" >/dev/null 2>&1 || true
 
-# --- DÉMARRAGE ---
 if [[ "$START_VM" == "yes" ]]; then
   echo -e "\e[34m[INFO]\e[0m Démarrage de la VM..."
-  qm start "$VMID"
+  qm start "$VMID" || echo -e "\e[33m[AVERTISSEMENT]\e[0m Échec du démarrage." >&2
 fi
 
-echo -e "\n\e[32m[SUCCÈS]\e[0m VM Ubuntu $UBUNTU_VERSION créée (ID: $VMID) !"
-echo -e "\e[33m[TIP]\e[0m Connectez-vous via : qm terminal $VMID"
+echo -e "\n\e[32m[SUCCÈS]\e[0m VM Ubuntu ${UBUNTU_VERSION} créée (ID: $VMID) !"
