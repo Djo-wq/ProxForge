@@ -8,8 +8,8 @@ PF_MODULE_FAMILY="debian"
 PF_MODULE_VERSION="1.0.0"
 PF_MODULE_ARCHES=("x86_64")
 
-PF_DEBIAN_IMAGE_BASE_URL="https://cloud.debian.org/images/cloud/trixie/latest"
-PF_DEBIAN_ALLOWED_HOSTS=("cloud.debian.org" "cdimage.debian.org" "cloudfront.debian.net")
+PF_DEBIAN_IMAGE_BASE_URL="https://cdimage.debian.org/cdimage/cloud/trixie/latest"
+PF_DEBIAN_ALLOWED_HOSTS=("cdimage.debian.org" "cloudfront.debian.net")
 
 pf_distro_init() {
   PF_MODULE_RESULT_JSON='{}'
