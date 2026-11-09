@@ -204,7 +204,7 @@ CPU_CORES=8 RAM_SIZE=16384 DISK_SIZE=100G STORAGE=local-zfs bash linux/create-ub
 
 Ce projet est distribué sous licence **MIT**. Vous êtes libre de l'utiliser, de le modifier et de le redistribuer, à des fins personnelles comme commerciales.
 
-## ProxForge CLI (phases 1–9)
+## ProxForge CLI (phases 1–10)
 
 The current modular ProxForge engine is operated through `proxforge.sh`:
 
@@ -223,3 +223,29 @@ The current modular ProxForge engine is operated through `proxforge.sh`:
 Use `--config FILE` before the command to select an explicit JSON configuration override. The CLI includes read-only module, profile, Proxmox and image-cache inspection; VM creation remains explicit through `deploy`. Debian's official-TLS checksum trust mode stays disabled by default.
 
 See [Phase 9 CLI documentation](docs/phase-9-complete-cli.md) for the command reference and [Phase 8 Debian module notes](docs/phase-8-debian-module.md) for Debian's image trust policy.
+
+
+### System installation (Phase 10)
+
+On a Proxmox VE 9.x node running Debian 13, install the modular CLI as root:
+
+```bash
+sudo bash scripts/install.sh
+```
+
+Optional flags:
+
+```bash
+sudo bash scripts/install.sh --install-dependencies
+sudo bash scripts/install.sh --provision-fedora-keyring
+```
+
+The installer keeps the JSON configuration under `/etc/proxforge`, operation state and image cache under `/var/lib/proxforge`, and logs under `/var/log/proxforge`. Fedora key provisioning is an explicit opt-in; Debian's official-TLS checksum policy remains disabled by default.
+
+The default uninstaller preserves configuration and data:
+
+```bash
+sudo bash /usr/local/lib/proxforge/scripts/uninstall.sh
+```
+
+Configuration backup/removal and state/cache/log removal require explicit `--remove-config` and `--remove-data` flags. See [Phase 10 installation documentation](docs/phase-10-installation.md) for the full filesystem layout, prerequisites and staging tests.
