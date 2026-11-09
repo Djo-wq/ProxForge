@@ -16,6 +16,7 @@ les rapports de phases sont conservés séparément de la documentation pratique
 - [CLI et commandes](phase-9-complete-cli.md)
 - [Contrats des modules et schémas](phase-1-contracts.md)
 - [Architecture](architecture.md)
+- [Anciens scripts autonomes](legacy-scripts.md)
 - [Contribuer au projet](../CONTRIBUTING.md)
 
 ## Historique des phases
