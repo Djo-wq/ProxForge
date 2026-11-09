@@ -346,7 +346,7 @@ pf_vm_lifecycle_deploy() {
     pf_vm_lifecycle_abort "Disk import failed or its outcome is uncertain; manual reconciliation is required."
     return 1
   }
-  volume_resource=$(jq -c --arg timestamp "$(pf_vm_lifecycle_now)" --argjson source "$PF_PVE_IMPORTED_RESOURCE_JSON" '
+  volume_resource=$(jq -cn --arg timestamp "$(pf_vm_lifecycle_now)" --argjson source "$PF_PVE_IMPORTED_RESOURCE_JSON" '
     $source + {resource_type:"volume",role:"system",created_at:$timestamp,ownership_verified:true}
   ') || { pf_vm_lifecycle_abort "Imported volume identity could not be recorded."; return 1; }
   pf_vm_lifecycle_add_resource "$volume_resource" || { pf_vm_lifecycle_abort "Imported volume ownership record could not be persisted."; return 1; }
