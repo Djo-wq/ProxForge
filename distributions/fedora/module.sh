@@ -8,9 +8,8 @@ PF_MODULE_FAMILY="redhat"
 PF_MODULE_VERSION="1.0.0"
 PF_MODULE_ARCHES=("x86_64")
 
-PF_FEDORA_IMAGE_BASE_URL="https://download.fedoraproject.org/pub/fedora/linux/releases"
-PF_FEDORA_IMAGE_HOST="download.fedoraproject.org"
-PF_FEDORA_MIRROR_HOST="dl.fedoraproject.org"
+PF_FEDORA_IMAGE_BASE_URL="https://dl.fedoraproject.org/pub/fedora/linux/releases"
+PF_FEDORA_IMAGE_HOST="dl.fedoraproject.org"
 PF_FEDORA_SIGNING_KEYRING="fedora-release"
 
 pf_distro_init() {
@@ -129,10 +128,10 @@ pf_distro_get_image() {
     --arg release "$release" \
     --arg keyring "$PF_FEDORA_SIGNING_KEYRING" \
     --arg image_host "$PF_FEDORA_IMAGE_HOST" \
-    --arg mirror_host "$PF_FEDORA_MIRROR_HOST" '{
+    --arg mirror_host "$PF_FEDORA_IMAGE_HOST" '{
       url:$url,
       filename:$filename,
-      allowed_hosts:[$image_host,$mirror_host],
+      allowed_hosts:[$image_host],
       download_format:"file",
       archive_format:"none",
       disk_format:"qcow2",
