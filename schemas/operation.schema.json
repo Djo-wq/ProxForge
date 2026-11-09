@@ -12,6 +12,7 @@
   "properties": {
     "schema_version": {"type": "integer", "const": 1},
     "operation_id": {"type": "string", "format": "uuid"},
+    "parent_operation_id": {"type": "string", "format": "uuid"},
     "created_at": {"type": "string", "format": "date-time"},
     "updated_at": {"type": "string", "format": "date-time"},
     "state": {
