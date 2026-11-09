@@ -18,11 +18,12 @@ check_schema() {
 }
 
 assert_required_fields() {
-  local file="$1"
+  local file="$1" expected_json
   shift
-  jq -e --args "$@" '
+  expected_json=$(printf '%s\n' "$@" | jq -R . | jq -cs .) || fail "could not build required-field test list"
+  jq -e --argjson expected "$expected_json" '
     .required as $required |
-    all($ARGS.positional[]; . as $field | ($required | index($field)) != null)
+    all($expected[]; . as $field | ($required | index($field)) != null)
   ' "$file" >/dev/null || fail "required fields missing in $(basename -- "$file")"
 }
 
