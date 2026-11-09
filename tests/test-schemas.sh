@@ -13,7 +13,7 @@ for schema in \
   "$ROOT_DIR/schemas/operation.schema.json" \
   "$ROOT_DIR/schemas/operation-event.schema.json"
 do
-  jq -e '.("$schema") == "https://json-schema.org/draft/2020-12/schema" and .type == "object" and (.additionalProperties == false)' "$schema" >/dev/null \
+  jq -e '.["$schema"] == "https://json-schema.org/draft/2020-12/schema" and .type == "object" and (.additionalProperties == false)' "$schema" >/dev/null \
     || fail "invalid schema document: $schema"
   pass "schema JSON parses: $(basename -- "$schema")"
 done
