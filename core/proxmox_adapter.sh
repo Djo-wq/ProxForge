@@ -2,7 +2,7 @@
 # ProxForge Proxmox VE Adapter. Sourced by Core; no host commands at source time.
 PF_PVE_INITIALIZED=false
 PF_PVE_VERSION=""
-PF_PVE_NODE=""
+PF_PVE_NODE="${PF_PVE_NODE:-}"
 PF_PVE_NODES_JSON="[]"
 PF_PVE_STORAGES_JSON="[]"
 PF_PVE_BRIDGES_JSON="[]"
@@ -206,7 +206,12 @@ pf_pve_vmid_is_available() {
     return 1
   }
   [[ -n "$PF_PVE_RESOURCES_JSON" ]] || pf_pve_refresh_inventory || return 1
-  if jq -e --argjson vmid "$vmid" 'type == "array" and any(.[]; (.vmid | tonumber?) == $vmid)' \
+  jq -e 'type == "array" and all(.[]; type == "object" and has("vmid"))' \
+    <<< "$PF_PVE_RESOURCES_JSON" >/dev/null || {
+    pf_pve_error "Cluster guest inventory is malformed; refusing to treat a VMID as available."
+    return 1
+  }
+  if jq -e --argjson vmid "$vmid" 'any(.[]; (.vmid | tonumber?) == $vmid)' \
     <<< "$PF_PVE_RESOURCES_JSON" >/dev/null; then
     pf_pve_error "VMID $vmid is already used by a VM or container in the cluster."
     return 1
