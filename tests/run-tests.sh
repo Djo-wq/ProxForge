@@ -12,6 +12,7 @@ for test_file in \
   "$ROOT_DIR/tests/test-schemas.sh" \
   "$ROOT_DIR/tests/test-module-contract.sh" \
   "$ROOT_DIR/tests/test-cli.sh" \
+  "$ROOT_DIR/tests/test-install.sh" \
   "$ROOT_DIR/tests/test-fedora-module.sh" \
   "$ROOT_DIR/tests/test-debian-module.sh" \
   "$ROOT_DIR/tests/test-core.sh" \
