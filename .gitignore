@@ -10,3 +10,7 @@ Thumbs.db
 *.log
 *.out
 .coverage/
+
+# Locally provisioned public key bundle (never commit host key material)
+/src/trust/keyrings/*.gpg
+/trust/keyrings/*.gpg
