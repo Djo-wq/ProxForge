@@ -151,9 +151,12 @@ pf_pve_refresh_inventory() {
     return 1
   }
   PF_PVE_BRIDGES_JSON=$(jq -ce '
-    type == "array" and
-    [.[] | select(.ifname | type == "string") |
-      {iface:.ifname,active:((.operstate == "UP") or ((.flags // []) | index("UP") != null))}]
+    if type != "array" then
+      error("bridge inventory must be an array")
+    else
+      [.[] | select(.ifname | type == "string") |
+        {iface:.ifname,active:((.operstate == "UP") or ((.flags // []) | index("UP") != null))}]
+    end
   ' <<< "$links") || {
     pf_pve_error "Linux bridge inspection returned invalid JSON."
     return 1
