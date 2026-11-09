@@ -12,6 +12,6 @@ les mêmes garanties de tests. Ne pas supposer qu'un mécanisme de rollback ou
 de vérification décrit pour la CLI s'applique à ces scripts.
 
 Pour un nouveau déploiement, utiliser la CLI modulaire et suivre la procédure
-de [pré-vol et de test](../docs/testing.md). Les anciens scripts doivent faire
+de [pré-vol et de test](testing.md). Les anciens scripts doivent faire
 l'objet d'une revue individuelle et d'un test isolé avant toute exécution sur
 un nœud Proxmox.
