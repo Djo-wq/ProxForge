@@ -22,7 +22,7 @@ CONFIG="$PREFIX/etc/proxforge/config.json"
 [[ "$(stat -c '%a' "$CONFIG")" == "640" ]] || fail "Configuration mode is not 0640"
 [[ "$(stat -c '%a' "$PREFIX/var/lib/proxforge/tmp")" == "700" ]] || fail "Temporary directory mode is not 0700"
 [[ "$(stat -c '%a' "$PREFIX/var/lib/proxforge/state")" == "700" ]] || fail "State directory mode is not 0700"
-"$LIB_PLACEHOLDER"
+"$LIB/proxforge.sh" --version >/dev/null || fail "Installed CLI could not start directly"
 "$PREFIX/usr/local/bin/proxforge" --version >/dev/null ||
   fail "Installed CLI could not start through the primary /usr/local/bin symlink"
 "$PREFIX/usr/local/bin/proxforge.sh" --version >/dev/null ||
