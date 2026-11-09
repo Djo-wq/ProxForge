@@ -53,6 +53,7 @@ if [[ -n "$PREFIX" ]]; then
   reject_symlink_prefix_components "$PREFIX"
   mkdir -p -- "$PREFIX"
   PREFIX=$(cd -- "$PREFIX" && pwd -P)
+  reject_symlink_prefix_components "$PREFIX"
   STAGING_MODE=true
 else
   STAGING_MODE=false
@@ -78,12 +79,13 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command is missing: $1"
 }
 
-for cmd in bash install cp mv mkdir chmod find mktemp readlink stat grep; do
+for cmd in bash install cp mv ln mkdir chmod find mktemp readlink stat grep; do
   require_command "$cmd"
 done
 
 if [[ "$STAGING_MODE" == "true" ]]; then
   require_command jq
+  require_command flock
 else
   [[ "${BASH_VERSINFO[0]}" -gt 5 || ("${BASH_VERSINFO[0]}" -eq 5 && "${BASH_VERSINFO[1]}" -ge 1) ]] ||
     fail "Bash 5.1 or newer is required."
