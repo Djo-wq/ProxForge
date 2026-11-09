@@ -3,7 +3,7 @@
 Lancer l'ensemble des tests depuis la racine :
 
 ```bash
-bash tests/run-tests.sh
+make test
 ```
 
 Le runner commence par vérifier la syntaxe des scripts Bash, puis exécute les
@@ -15,5 +15,5 @@ Les tests de composants utilisent des fixtures, des commandes simulées et des
 répertoires temporaires. Ils ne sont pas conçus pour créer ou supprimer des
 ressources sur un vrai cluster.
 
-Voir [la stratégie de test et le pré-vol](../docs/testing.md) pour connaître
+Voir [la stratégie de test et le pré-vol](../docs/development/testing.md) pour connaître
 les limites et l'ordre recommandé avant une première validation sur Proxmox.

@@ -7,11 +7,11 @@ trap 'rm -rf -- "$TMP_ROOT"' EXIT
 fail() { printf '[FAIL] %s\n' "$*" >&2; exit 1; }
 pass() { printf '[PASS] %s\n' "$*"; }
 
-export PF_CORE_ROOT="$ROOT_DIR"
+export PF_CORE_ROOT="$ROOT_DIR/src"
 export PF_CORE_TEST_MODE=1
 export PF_PVE_TEST_MODE=1
 export PF_CORE_DISTRIBUTIONS_DIR="$ROOT_DIR/tests/fixtures/modules"
-source "$ROOT_DIR/core/bootstrap.sh"
+source "$ROOT_DIR/src/core/bootstrap.sh"
 pf_core_init || fail "Core initialization failed"
 
 STATE_ROOT="$TMP_ROOT/state"
@@ -39,7 +39,7 @@ PF_IMAGE_METADATA_JSON=$(<"$IMAGE.json")
 PF_CORE_CONFIG_JSON=$(jq --arg state "$STATE_ROOT" --arg cache "$IMAGE_CACHE" '
   .state_dir=$state | .image_cache_dir=$cache | .start_vm=true |
   .allow_official_tls_checksum=true
-' "$ROOT_DIR/config/defaults.json")
+' "$ROOT_DIR/src/config/defaults.json")
 
 PF_FAKE_NEXT_VMID=300
 PF_FAKE_START_COUNT=0

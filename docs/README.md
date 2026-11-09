@@ -1,28 +1,25 @@
 # Documentation ProxForge
 
-Bienvenue dans la documentation du projet. Cette page sert de point d'entrée ;
-les rapports de phases sont conservés séparément de la documentation pratique.
+Cette documentation sépare les guides pratiques, l'architecture et les rapports historiques des phases.
 
-## Commencer
+## Guides pratiques
 
-- [Architecture et flux de déploiement](architecture.md)
-- [Organisation du dépôt](repository-layout.md)
-- [Installer et désinstaller](phase-10-installation.md)
-- [Exécuter les tests](testing.md)
-- [Audit final et limites connues](phase-11-final-audit.md)
+- [Architecture technique](architecture/overview.md)
+- [Organisation du dépôt](development/repository-layout.md)
+- [Tests et pré-vol](development/testing.md)
+- [Anciens scripts autonomes](legacy/README.md)
+- [Installation et désinstallation — Phase 10](phases/phase-10-installation.md)
+- [Audit et stabilisation — Phase 11](phases/phase-11-final-audit.md)
+- [Guide de contribution](../CONTRIBUTING.md)
 
-## Référence opérateur et développeur
+## Référence du moteur
 
-- [CLI et commandes](phases/phase-9-complete-cli.md)
-- [Contrats des modules et schémas](phases/phase-1-contracts.md)
-- [Architecture](architecture.md)
-- [Anciens scripts autonomes](legacy-scripts.md)
-- [Contribuer au projet](../CONTRIBUTING.md)
+- [Contrats des modules — Phase 1](phases/phase-1-contracts.md)
+- [CLI complète — Phase 9](phases/phase-9-complete-cli.md)
 
 ## Historique des phases
 
-Les documents suivants décrivent l'évolution technique du projet. Ils sont
-des notes d'implémentation et ne remplacent pas les procédures opérateur.
+Les rapports décrivent l'évolution technique du projet. Ils sont des notes d'implémentation et ne remplacent pas les procédures opérateur.
 
 - [Phase 1 — Contrats et schémas](phases/phase-1-contracts.md)
 - [Phase 2 — Core Foundation](phases/phase-2-core.md)
@@ -33,5 +30,5 @@ des notes d'implémentation et ne remplacent pas les procédures opérateur.
 - [Phase 7 — Module Fedora](phases/phase-7-fedora-module.md)
 - [Phase 8 — Module Debian](phases/phase-8-debian-module.md)
 - [Phase 9 — CLI complète](phases/phase-9-complete-cli.md)
-- [Phase 10 — Installation et configuration](phase-10-installation.md)
-- [Phase 11 — Audit et stabilisation](phase-11-final-audit.md)
+- [Phase 10 — Installation et configuration](phases/phase-10-installation.md)
+- [Phase 11 — Audit et stabilisation](phases/phase-11-final-audit.md)

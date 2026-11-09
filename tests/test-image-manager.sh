@@ -94,13 +94,13 @@ export PATH="$MOCK_BIN:$PATH"
 CACHE_DIR="$TMP_ROOT/cache"
 CONFIG_FILE="$TMP_ROOT/config.json"
 jq --arg cache "$CACHE_DIR" '.image_cache_dir=$cache | .image_max_bytes=10485760 | .allow_official_tls_checksum=false' \
-  "$ROOT_DIR/config/defaults.json" > "$CONFIG_FILE"
+  "$ROOT_DIR/src/config/defaults.json" > "$CONFIG_FILE"
 
-export PF_CORE_ROOT="$ROOT_DIR"
+export PF_CORE_ROOT="$ROOT_DIR/src"
 export PF_CORE_CONFIG_FILE="$CONFIG_FILE"
 export PF_CORE_TEST_MODE=1
 export PF_IMAGE_TEST_MODE=1
-source "$ROOT_DIR/core/bootstrap.sh"
+source "$ROOT_DIR/src/core/bootstrap.sh"
 pf_core_init || fail "Core initialization failed"
 
 descriptor=$(jq -cn --arg url "https://images.example.test/fedora-cloud.qcow2" \

@@ -9,11 +9,10 @@ modulaire, sauf demande explicite de maintenance d'un ancien script.
 
 1. Ouvrir une branche dédiée depuis `main` : `feat/<sujet>`,
    `fix/<sujet>` ou `chore/<sujet>`.
-2. Lire [l'architecture](docs/architecture.md), [l'organisation du dépôt](docs/repository-layout.md)
-   et [les instructions de test](docs/testing.md).
+2. Lire [l'architecture](docs/architecture/overview.md), [l'organisation du dépôt](docs/development/repository-layout.md)
+   et [les instructions de test](docs/development/testing.md).
 3. Identifier les chemins runtime. L'installateur copie explicitement
-   `proxforge.sh`, `core/`, `distributions/`, `profiles/`, `config/`,
-   `schemas/`, `trust/` et `scripts/`. Les déplacer exige de mettre à jour
+   `proxforge.sh`, `src/` et `scripts/`. Les déplacer exige de mettre à jour
    l'installateur, les tests et la documentation dans le même changement.
 
 ## Conventions Bash
@@ -37,7 +36,7 @@ Avant une PR, lancer :
 
 ```bash
 bash tests/run-tests.sh
-shellcheck --severity=error proxforge.sh scripts/install.sh scripts/uninstall.sh tests/test-install.sh
+make check
 ```
 
 Les tests doivent rester hermétiques : ils ne doivent ni créer/supprimer une VM
