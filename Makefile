@@ -1,4 +1,5 @@
-SHELL := /usr/bin/env bash
+SHELL := /bin/bash
+.SHELLFLAGS := -eu -o pipefail -c
 
 .PHONY: help test lint syntax check
 
