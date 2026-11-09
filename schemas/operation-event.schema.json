@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxforge.invalid/schemas/operation-event.schema.json",
+  "title": "ProxForge operation event",
+  "description": "One JSON object per line in an operation events.jsonl file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation_id", "sequence", "timestamp", "event", "state"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "operation_id": {"type": "string", "format": "uuid"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "event": {
+      "type": "string",
+      "enum": [
+        "INITIALIZED", "VALIDATED", "MODULE_LOADED", "IMAGE_RESOLVED",
+        "IMAGE_DOWNLOAD_INTENT", "IMAGE_DOWNLOADED", "IMAGE_VERIFIED",
+        "VM_CREATE_INTENT", "VM_CREATED", "DISK_IMPORT_INTENT",
+        "DISK_IMPORTED", "VM_CONFIGURED", "CLOUD_INIT_CONFIGURED",
+        "VM_START_INTENT", "VM_STARTED", "COMPLETED", "FAILED",
+        "ROLLBACK_INTENT", "RESOURCE_REMOVED", "ROLLBACK_COMPLETED",
+        "ROLLBACK_INCOMPLETE", "RECONCILIATION_REQUIRED"
+      ]
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "INITIALIZING", "VALIDATING", "MODULE_LOADING", "IMAGE_RESOLVING",
+        "IMAGE_DOWNLOADING", "IMAGE_VERIFYING", "VM_CREATING",
+        "DISK_IMPORTING", "VM_CONFIGURING", "CLOUD_INIT_CONFIGURING",
+        "VM_STARTING", "COMPLETED", "FAILED", "ROLLBACK_REQUIRED",
+        "ROLLING_BACK", "ROLLBACK_COMPLETED", "ROLLBACK_INCOMPLETE"
+      ]
+    },
+    "action": {"type": "string", "maxLength": 120},
+    "outcome": {"type": "string", "enum": ["INTENT", "SUCCESS", "FAILURE", "OBSERVED"]},
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resource_type": {"type": "string"},
+        "volid": {"type": "string"},
+        "storage": {"type": "string"},
+        "vmid": {"type": "integer"}
+      }
+    },
+    "details": {"type": "object"}
+  }
+}

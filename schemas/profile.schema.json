@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxforge.invalid/schemas/profile.schema.json",
+  "title": "ProxForge hardware profile",
+  "description": "Declarative, distribution-independent VM hardware settings. No shell commands or free-form qm arguments are allowed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "id", "name", "description", "cpu_cores",
+    "memory_mb", "disk_gb", "machine", "firmware",
+    "scsi_controller", "network_model", "agent_enabled", "secure_boot"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$"},
+    "name": {"type": "string", "minLength": 1, "maxLength": 80},
+    "description": {"type": "string", "maxLength": 500},
+    "cpu_cores": {"type": "integer", "minimum": 1, "maximum": 256},
+    "memory_mb": {"type": "integer", "minimum": 128, "maximum": 4194304},
+    "disk_gb": {"type": "integer", "minimum": 1, "maximum": 65536},
+    "machine": {"type": "string", "const": "q35"},
+    "firmware": {"type": "string", "const": "ovmf"},
+    "scsi_controller": {"type": "string", "const": "virtio-scsi-pci"},
+    "network_model": {"type": "string", "const": "virtio"},
+    "agent_enabled": {"type": "boolean"},
+    "secure_boot": {"type": "boolean"}
+  }
+}
