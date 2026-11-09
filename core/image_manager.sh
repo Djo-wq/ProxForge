@@ -857,3 +857,71 @@ pf_image_acquire() {
   exec {lock_fd}>&-
   return 1
 }
+
+
+pf_image_cache_list() {
+  local file metadata_file metadata_json metadata_valid distribution release architecture
+  local actual_size integrity_state output='[]' nullglob_was_set=0
+  local -a image_files=()
+
+  pf_image_init || return 1
+  shopt -q nullglob && nullglob_was_set=1
+  shopt -s nullglob
+  image_files=("${PF_IMAGE_CACHE_DIR}"/*/*/*/*.qcow2 "${PF_IMAGE_CACHE_DIR}"/*/*/*/*.raw)
+  (( nullglob_was_set == 1 )) || shopt -u nullglob
+
+  for file in "${image_files[@]}"; do
+    [[ -f "$file" && ! -L "$file" ]] || continue
+    metadata_file="$file.json"
+    architecture=$(basename -- "$(dirname -- "$file")")
+    release=$(basename -- "$(dirname -- "$(dirname -- "$file")")")
+    distribution=$(basename -- "$(dirname -- "$(dirname -- "$(dirname -- "$file")")")")
+    pf_core_is_safe_id "$distribution" || continue
+    pf_image_safe_token "$release" || continue
+    [[ "$architecture" == "x86_64" ]] || continue
+    actual_size=$(stat -c '%s' "$file") || return 1
+    metadata_valid=false
+    integrity_state="missing-or-invalid-metadata"
+    metadata_json='{}'
+
+    if [[ -f "$metadata_file" && ! -L "$metadata_file" && -r "$metadata_file" ]]; then
+      metadata_json=$(<"$metadata_file") || metadata_json='{}'
+      if jq -e --arg distribution "$distribution" --arg release "$release" \
+        --arg architecture "$architecture" --argjson size "$actual_size" '
+          type == "object" and .schema_version == 1 and
+          .distribution == $distribution and .release == $release and
+          .architecture == $architecture and .file_size == $size and
+          (.disk_format == "qcow2" or .disk_format == "raw") and
+          (.checksum_algorithm == "sha256" or .checksum_algorithm == "sha512") and
+          ((.checksum_algorithm == "sha256" and
+             (.checksum_value | type == "string" and test("^[a-f0-9]{64}$"))) or
+           (.checksum_algorithm == "sha512" and
+             (.checksum_value | type == "string" and test("^[a-f0-9]{128}$")))) and
+          .verification_result == true and
+          (.trust_level == "signed" or .trust_level == "official_tls")
+        ' <<< "$metadata_json" >/dev/null; then
+        metadata_valid=true
+        integrity_state="metadata-consistent-not-rehashed"
+      fi
+    fi
+
+    output=$(jq -c --arg path "$file" --arg metadata_path "$metadata_file" \
+      --arg distribution "$distribution" --arg release "$release" \
+      --arg architecture "$architecture" --argjson size "$actual_size" \
+      --argjson metadata_valid "$metadata_valid" --arg integrity "$integrity_state" \
+      --argjson metadata "$metadata_json" '
+        . + [{
+          path:$path,metadata_path:$metadata_path,distribution:$distribution,
+          release:$release,architecture:$architecture,size_bytes:$size,
+          metadata_valid:$metadata_valid,integrity_state:$integrity,
+          checksum_algorithm:($metadata.checksum_algorithm // null),
+          verification_method:($metadata.verification_method // null),
+          trust_level:($metadata.trust_level // null),
+          cached_at:($metadata.cached_at // null)
+        }]
+      ' <<< "$output") || return 1
+  done
+
+  PF_IMAGE_CACHE_LIST_JSON=$(jq -c 'sort_by(.distribution,.release,.architecture,.path)' <<< "$output") || return 1
+  jq . <<< "$PF_IMAGE_CACHE_LIST_JSON"
+}

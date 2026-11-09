@@ -4,6 +4,7 @@ pf_core_config_load() {
   local override_file="${1:-}"
   local defaults_file="${PF_CORE_ROOT}/config/defaults.json"
   local merged_json
+  PF_CORE_CONFIG_SOURCE_FILE="$defaults_file"
 
   [[ -r "$defaults_file" ]] || {
     pf_core_error "Default configuration is not readable: $defaults_file"
@@ -32,6 +33,7 @@ pf_core_config_load() {
       return 1
     }
     merged_json=$(jq -s '.[0] + .[1]' "$defaults_file" "$override_file") || return 1
+    PF_CORE_CONFIG_SOURCE_FILE="$override_file"
   else
     merged_json=$(jq -c . "$defaults_file") || return 1
   fi

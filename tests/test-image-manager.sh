@@ -14,10 +14,15 @@ export FAKE_QEMU_LOG="$TMP_ROOT/qemu.log"
 export FAKE_CHECKSUM_FILE="$TMP_ROOT/SHA256SUMS"
 export FAKE_IMAGE_FILE="$TMP_ROOT/valid-image"
 export FAKE_BAD_IMAGE_FILE="$TMP_ROOT/bad-image"
+export FAKE_DEBIAN_CHECKSUM_FILE="$TMP_ROOT/DEBIAN-SHA512SUMS"
+export FAKE_DEBIAN_IMAGE_FILE="$TMP_ROOT/debian-image"
 : > "$FAKE_CURL_LOG"
 : > "$FAKE_QEMU_LOG"
 printf 'synthetic qcow2 fixture payload\n' > "$FAKE_IMAGE_FILE"
 printf 'different synthetic payload\n' > "$FAKE_BAD_IMAGE_FILE"
+printf 'synthetic Debian qcow2 fixture\n' > "$FAKE_DEBIAN_IMAGE_FILE"
+debian_digest=$(sha512sum "$FAKE_DEBIAN_IMAGE_FILE" | awk '{print $1}')
+printf '%s  debian-13-generic-amd64.qcow2\n' "$debian_digest" > "$FAKE_DEBIAN_CHECKSUM_FILE"
 digest=$(sha256sum "$FAKE_IMAGE_FILE" | awk '{print $1}')
 printf '%s  fedora-cloud.qcow2\n' "$digest" > "$FAKE_CHECKSUM_FILE"
 
@@ -57,6 +62,12 @@ case "$url" in
     else
       cp -- "$FAKE_IMAGE_FILE" "$output"
     fi
+    ;;
+  https://cdimage.debian.org/cdimage/cloud/trixie/latest/SHA512SUMS)
+    cp -- "$FAKE_DEBIAN_CHECKSUM_FILE" "$output"
+    ;;
+  https://cdimage.debian.org/cdimage/cloud/trixie/latest/debian-13-generic-amd64.qcow2)
+    cp -- "$FAKE_DEBIAN_IMAGE_FILE" "$output"
     ;;
   *)
     printf 'Unexpected URL: %s\n' "$url" >&2
@@ -119,6 +130,39 @@ mv "$CONFIG_FILE.new" "$CONFIG_FILE"
 pf_core_config_load "$CONFIG_FILE" || fail "Could not load explicit checksum policy"
 pf_image_validate_descriptor "$descriptor" || fail "Valid descriptor rejected after explicit opt-in"
 pass "official-TLS checksum requires explicit configuration opt-in"
+
+# Exercise the Debian module's real SHA-512 acquisition contract end to end.
+debian_descriptor=$(jq -cn '{
+  url:"https://cdimage.debian.org/cdimage/cloud/trixie/latest/debian-13-generic-amd64.qcow2",
+  filename:"debian-13-generic-amd64.qcow2",
+  allowed_hosts:["cdimage.debian.org","cloudfront.debian.net"],
+  download_format:"file",archive_format:"none",disk_format:"qcow2",
+  architecture:"x86_64",release:"13",
+  checksum:{
+    url:"https://cdimage.debian.org/cdimage/cloud/trixie/latest/SHA512SUMS",
+    algorithm:"sha512",filename:"SHA512SUMS"
+  },
+  signature:null,
+  verification:{method:"official-tls-checksum",trust_level:"official_tls"},
+  cloud_init:{status:"verified",datasource:"NoCloud"}
+}')
+pf_image_validate_descriptor "$debian_descriptor" ||
+  fail "Image Manager rejected the Debian official SHA-512 descriptor"
+pf_image_acquire debian "$debian_descriptor" ||
+  fail "Debian SHA-512 image acquisition failed"
+jq -e '.distribution=="debian" and .release=="13" and
+  .checksum_algorithm=="sha512" and .verification_method=="official-tls-checksum" and
+  .trust_level=="official_tls" and .verification_result==true' \
+  "$PF_IMAGE_PATH.json" >/dev/null || fail "Debian cache metadata lost its SHA-512 trust contract"
+[[ "$PF_IMAGE_CACHE_HIT" == "false" ]] || fail "First Debian acquisition should be a cache miss"
+DEBIAN_CACHE_PATH="$PF_IMAGE_PATH"
+pf_image_acquire debian "$debian_descriptor" ||
+  fail "Debian SHA-512 cache revalidation failed"
+[[ "$PF_IMAGE_CACHE_HIT" == "true" && "$PF_IMAGE_PATH" == "$DEBIAN_CACHE_PATH" ]] ||
+  fail "Debian cache hit did not reuse the verified SHA-512 image"
+[[ "$(grep -Fc 'https://cdimage.debian.org/cdimage/cloud/trixie/latest/debian-13-generic-amd64.qcow2' "$FAKE_CURL_LOG" || true)" == "1" ]] ||
+  fail "Debian image was downloaded again on a cache hit"
+pass "Debian SHA-512 download, digest verification, QCOW2 inspection and cache revalidation"
 
 pf_image_acquire fedora "$descriptor" || fail "Verified test image could not be acquired"
 [[ -f "$PF_IMAGE_PATH" ]] || fail "Image cache path was not returned"
