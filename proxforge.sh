@@ -300,7 +300,7 @@ COMPLETION
 }
 
 main() {
-  local config_file="" command=help
+  local config_file="" command=help version_shortcut=false
   while (( $# > 0 )); do
     case "$1" in
       --config)
@@ -313,6 +313,7 @@ main() {
       --help|-h) usage; return 0 ;;
       --version)
         command=version
+        version_shortcut=true
         shift
         break ;;
       --) shift; break ;;
@@ -330,7 +331,8 @@ main() {
 
   case "$command" in
     version)
-      (( $# == 1 )) || return "$PF_EXIT_ARGUMENTS"
+      if [[ "$version_shortcut" == "true" ]]; then (( $# == 0 )) || return "$PF_EXIT_ARGUMENTS"
+      else (( $# == 1 )) || return "$PF_EXIT_ARGUMENTS"; fi
       printf 'ProxForge %s (Module API %s)\n' "$PF_CORE_VERSION" "$PF_CORE_MODULE_API_VERSION" ;;
     help|-h|--help)
       (( $# == 1 )) || return "$PF_EXIT_ARGUMENTS"
