@@ -64,6 +64,9 @@ pass "Module image inspection resolves pinned releases without downloading image
 CONFIG_FILE="$TMP_ROOT/config.json"
 jq -n --arg cache "$TMP_ROOT/cache" '{image_cache_dir:$cache}' > "$CONFIG_FILE"
 CONFIG_SHOW=$(bash "$CLI" --config "$CONFIG_FILE" config show) || fail "Global --config option failed"
+CONFIG_SHOW_EQUALS=$(bash "$CLI" "--config=$CONFIG_FILE" config show) || fail "Equals-form --config option failed"
+jq -e --arg cache "$TMP_ROOT/cache" '.image_cache_dir==$cache' <<< "$CONFIG_SHOW_EQUALS" >/dev/null ||
+  fail "Equals-form --config option did not select the requested file"
 jq -e --arg cache "$TMP_ROOT/cache" '.image_cache_dir==$cache and .allow_official_tls_checksum==false' \
   <<< "$CONFIG_SHOW" >/dev/null || fail "Configuration override merge did not preserve secure defaults"
 
@@ -114,6 +117,10 @@ pass "Image cache inventory reports metadata status without claiming to re-hash 
 COMPLETION=$(bash "$CLI" completion bash) || fail "Bash completion generation failed"
 grep -q 'complete -F _proxforge_complete proxforge.sh' <<< "$COMPLETION" ||
   fail "Bash completion registration is missing"
+grep -q 'module releases' <<< "$COMPLETION" ||
+  fail "Dynamic distribution release completion is missing"
+bash "$CLI" deploy --help > "$TMP_ROOT/deploy-help.txt" || fail "Deploy help failed"
+grep -q -- '--name NAME' "$TMP_ROOT/deploy-help.txt" || fail "Deploy help omits named CLI options"
 
 if bash "$CLI" not-a-command >/dev/null 2>&1; then
   fail "Unknown CLI command was accepted"
