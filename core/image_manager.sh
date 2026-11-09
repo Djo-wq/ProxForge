@@ -361,7 +361,15 @@ pf_image_verify_signature() {
     rm -f -- "$status_file" "$error_file"
     return 1
   }
-  mapfile -t valid_fingerprints < <(awk '$1 == "[GNUPG:]" && $2 == "VALIDSIG" { print toupper($3) }' "$status_file")
+  # VALIDSIG ends with the primary-key fingerprint when a signing subkey is used.
+  mapfile -t valid_fingerprints < <(awk '
+    $1 == "[GNUPG:]" && $2 == "VALIDSIG" {
+      fingerprint=$3
+      candidate=$NF
+      if (length(candidate) == 40 || length(candidate) == 64) fingerprint=candidate
+      print toupper(fingerprint)
+    }
+  ' "$status_file")
   rm -f -- "$status_file" "$error_file"
 
   if (( ${#valid_fingerprints[@]} != 1 )); then
@@ -454,7 +462,15 @@ pf_image_verify_clearsigned_checksum() {
     rm -f -- "$status_file" "$error_file" "$verified_output"
     return 1
   }
-  mapfile -t valid_fingerprints < <(awk '$1 == "[GNUPG:]" && $2 == "VALIDSIG" { print toupper($3) }' "$status_file")
+  # VALIDSIG ends with the primary-key fingerprint when a signing subkey is used.
+  mapfile -t valid_fingerprints < <(awk '
+    $1 == "[GNUPG:]" && $2 == "VALIDSIG" {
+      fingerprint=$3
+      candidate=$NF
+      if (length(candidate) == 40 || length(candidate) == 64) fingerprint=candidate
+      print toupper(fingerprint)
+    }
+  ' "$status_file")
   rm -f -- "$status_file" "$error_file"
 
   if (( ${#valid_fingerprints[@]} != 1 )); then
