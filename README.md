@@ -204,7 +204,7 @@ CPU_CORES=8 RAM_SIZE=16384 DISK_SIZE=100G STORAGE=local-zfs bash linux/create-ub
 
 Ce projet est distribué sous licence **MIT**. Vous êtes libre de l'utiliser, de le modifier et de le redistribuer, à des fins personnelles comme commerciales.
 
-## ProxForge CLI (phases 1–10)
+## ProxForge CLI (phases 1–11)
 
 The current modular ProxForge engine is operated through `proxforge.sh`:
 
@@ -249,3 +249,8 @@ sudo bash /usr/local/lib/proxforge/scripts/uninstall.sh
 ```
 
 Configuration backup/removal and state/cache/log removal require explicit `--remove-config` and `--remove-data` flags. See [Phase 10 installation documentation](docs/phase-10-installation.md) for the full filesystem layout, prerequisites and staging tests.
+
+
+### Final audit (Phase 11)
+
+The final audit fixes installed CLI entry-point resolution and expands installation regression coverage. See [Phase 11 audit and stabilization report](docs/phase-11-final-audit.md).

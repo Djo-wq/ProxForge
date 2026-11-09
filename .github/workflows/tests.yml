@@ -12,6 +12,7 @@ on:
       - phase-8/**
       - phase-9/**
       - phase-10/**
+      - phase-11/**
   pull_request:
     branches:
       - main
@@ -28,6 +29,8 @@ jobs:
       - name: Install jq
         run: |
           sudo apt-get update
-          sudo apt-get install --yes jq
+          sudo apt-get install --yes jq shellcheck
+      - name: Run ShellCheck on Phase 11 entry points
+        run: shellcheck --severity=error proxforge.sh scripts/install.sh scripts/uninstall.sh tests/test-install.sh
       - name: Run hermetic test suite
         run: bash tests/run-tests.sh

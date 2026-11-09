@@ -22,7 +22,21 @@ CONFIG="$PREFIX/etc/proxforge/config.json"
 [[ "$(stat -c '%a' "$CONFIG")" == "640" ]] || fail "Configuration mode is not 0640"
 [[ "$(stat -c '%a' "$PREFIX/var/lib/proxforge/tmp")" == "700" ]] || fail "Temporary directory mode is not 0700"
 [[ "$(stat -c '%a' "$PREFIX/var/lib/proxforge/state")" == "700" ]] || fail "State directory mode is not 0700"
-"$LIB/proxforge.sh" --version >/dev/null || fail "Installed CLI could not start"
+"$LIB/proxforge.sh" --version >/dev/null || fail "Installed CLI could not start directly"
+"$PREFIX/usr/local/bin/proxforge" --version >/dev/null ||
+  fail "Installed CLI could not start through the primary /usr/local/bin symlink"
+"$PREFIX/usr/local/bin/proxforge.sh" --version >/dev/null ||
+  fail "Backward-compatible CLI symlink could not start"
+"$PREFIX/usr/local/bin/proxforge" completion bash > "$TMP_ROOT/installed-completion.sh" ||
+  fail "Installed CLI could not generate Bash completion"
+grep -q 'complete -F _proxforge_complete proxforge.sh' "$TMP_ROOT/installed-completion.sh" ||
+  fail "Installed CLI completion output is incomplete"
+
+# Simulate a locally provisioned trusted Fedora keyring and confirm upgrades retain it.
+mkdir -p "$LIB/trust/keyrings"
+printf 'locally provisioned pinned public key bundle\n' > "$LIB/trust/keyrings/fedora-release.gpg"
+chmod 0640 "$LIB/trust/keyrings/fedora-release.gpg"
+
 pass "Staged install creates secure FHS paths, configuration and relocatable CLI links"
 
 jq '.log_level="DEBUG"' "$CONFIG" > "$TMP_ROOT/config.json"
@@ -30,7 +44,20 @@ cat "$TMP_ROOT/config.json" > "$CONFIG"
 bash "$ROOT_DIR/scripts/install.sh" --prefix "$PREFIX" >/dev/null || fail "Idempotent staged upgrade failed"
 jq -e '.log_level=="DEBUG"' "$CONFIG" >/dev/null || fail "Upgrade overwrote the administrator configuration"
 [[ -f "$LIB/.proxforge-install-manifest" ]] || fail "Upgrade lost its install manifest"
+cmp -s "$LIB/trust/keyrings/fedora-release.gpg" <(printf 'locally provisioned pinned public key bundle\n') ||
+  fail "Upgrade did not preserve the locally provisioned Fedora keyring"
 pass "Repeated installation is idempotent and preserves administrator configuration"
+
+# A foreign executable symlink must be rejected before destructive config removal.
+rm -- "$PREFIX/usr/local/bin/proxforge"
+ln -s /etc/passwd "$PREFIX/usr/local/bin/proxforge"
+if bash "$ROOT_DIR/scripts/uninstall.sh" --prefix "$PREFIX" --remove-config >/dev/null 2>&1; then
+  fail "Uninstaller accepted an unmanaged CLI symlink"
+fi
+[[ -f "$CONFIG" && -d "$LIB" ]] || fail "Rejected uninstallation changed application files or configuration"
+rm -- "$PREFIX/usr/local/bin/proxforge"
+ln -s ../lib/proxforge/proxforge.sh "$PREFIX/usr/local/bin/proxforge"
+pass "Uninstaller preflights unmanaged links before optional configuration removal"
 
 bash "$ROOT_DIR/scripts/uninstall.sh" --prefix "$PREFIX" >/dev/null || fail "Default staged uninstall failed"
 [[ ! -e "$LIB" ]] || fail "Application directory remains after uninstall"
@@ -74,5 +101,16 @@ if bash "$ROOT_DIR/scripts/install.sh" --prefix "$TMP_ROOT/prefix-link/install" 
   fail "Installer accepted a staging path traversing a symlink"
 fi
 pass "Installer and uninstaller reject unsafe staging paths and symlinked prefixes"
+
+FOREIGN_PREFIX="$TMP_ROOT/foreign-stage"
+mkdir -p "$FOREIGN_PREFIX/usr/local/lib/proxforge"
+printf 'unrelated user data\n' > "$FOREIGN_PREFIX/usr/local/lib/proxforge/keep.txt"
+if bash "$ROOT_DIR/scripts/install.sh" --prefix "$FOREIGN_PREFIX" >/dev/null 2>&1; then
+  fail "Installer replaced an unmanaged application directory"
+fi
+[[ "$(cat "$FOREIGN_PREFIX/usr/local/lib/proxforge/keep.txt")" == "unrelated user data" ]] ||
+  fail "Installer changed unrelated files in an unmanaged directory"
+pass "Installer refuses to replace an unmanaged application directory"
+
 
 pass "Installation tests completed without touching live /etc, /var, /usr/local or Proxmox resources"
