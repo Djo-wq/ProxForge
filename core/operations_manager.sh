@@ -187,6 +187,22 @@ pf_operations_handle_failure() {
     details=$(jq -cn --arg message "$message" '{message:$message,automatic_rollback:false}') || details='{}'
     pf_vm_lifecycle_event FAILED FAILED FAILURE "$message" "$details" || true
   elif [[ "$mode" == "auto" ]]; then
+    # An abort can occur while the manifest is still in VM_CREATING,
+    # DISK_IMPORTING or VM_CONFIGURING. Persist the terminal failure state
+    # before entering the rollback state machine.
+    pf_vm_lifecycle_set_state FAILED PENDING || {
+      pf_operations_mark_blocked "Could not persist the deployment failure state before rollback." || true
+      pf_vm_lifecycle_error "$message"
+      pf_vm_lifecycle_unlock
+      return 1
+    }
+    details=$(jq -cn --arg message "$message" '{message:$message,rollback_scheduled:true}') || details='{}'
+    pf_vm_lifecycle_event FAILED FAILED FAILURE "$message" "$details" || {
+      pf_operations_mark_incomplete "Could not persist the deployment failure event before rollback." || true
+      pf_vm_lifecycle_error "$message"
+      pf_vm_lifecycle_unlock
+      return 1
+    }
     pf_operations_rollback_locked "$message" true || true
   else
     pf_operations_mark_blocked "Deployment failed; rollback_mode=keep preserves its resources." || true
