@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "default_profile": "standard",
+  "rollback_mode": "auto",
+  "start_vm": true,
+  "allow_official_tls_checksum": false,
+  "image_cache_dir": "/var/lib/proxforge/cache",
+  "tmp_dir": "/var/lib/proxforge/tmp",
+  "state_dir": "/var/lib/proxforge/state",
+  "log_dir": "/var/log/proxforge",
+  "log_level": "INFO"
+}
