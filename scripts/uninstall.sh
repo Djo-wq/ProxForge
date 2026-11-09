@@ -88,6 +88,14 @@ flock -n 9 || fail "another ProxForge installation or removal is already running
 [[ "$(cat -- "$LIB_DIR/.proxforge-install-manifest")" == "proxforge-managed-install-v1" ]] ||
   fail "installation manifest is invalid; refusing to remove an unmanaged directory."
 
+
+for link in "$BIN_DIR/proxforge" "$BIN_DIR/proxforge.sh"; do
+  if [[ -L "$link" ]]; then
+    [[ "$(readlink -- "$link")" == "../lib/proxforge/proxforge.sh" ]] ||
+      fail "refusing to remove an unmanaged symbolic link: $link"
+  fi
+done
+
 if [[ "$REMOVE_CONFIG" == "true" && ( -e "$ETC_DIR" || -L "$ETC_DIR" ) ]]; then
   [[ -d "$ETC_DIR" && ! -L "$ETC_DIR" ]] || fail "configuration path is not a regular directory."
   command -v tar >/dev/null 2>&1 || fail "tar is required to back up configuration before removal."
