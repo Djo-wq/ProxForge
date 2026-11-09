@@ -101,11 +101,14 @@ jq -n --arg digest "$IMAGE_DIGEST" --argjson size "$IMAGE_SIZE" '{
 printf 'orphaned image bytes\n' > "$IMAGE_DIR/orphan.qcow2"
 
 CACHE_LIST=$(bash "$CLI" --config "$CONFIG_FILE" image cache list) || fail "Image cache inventory failed"
-jq -e --arg path "$IMAGE" '
+if ! jq -e --arg path "$IMAGE" '
   length==2 and any(.[];.path==$path and .metadata_valid==true and
     .integrity_state=="metadata-consistent-not-rehashed" and .trust_level=="signed") and
   any(.[];(.path|endswith("orphan.qcow2")) and .metadata_valid==false)
-' <<< "$CACHE_LIST" >/dev/null || fail "Cache inventory did not distinguish consistent and orphaned metadata"
+' <<< "$CACHE_LIST" >/dev/null; then
+  printf 'Cache inventory output: %s\n' "$CACHE_LIST" >&2
+  fail "Cache inventory did not distinguish consistent and orphaned metadata"
+fi
 pass "Image cache inventory reports metadata status without claiming to re-hash cached bytes"
 
 COMPLETION=$(bash "$CLI" completion bash) || fail "Bash completion generation failed"
