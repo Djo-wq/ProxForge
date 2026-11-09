@@ -267,8 +267,10 @@ if command -v gpg >/dev/null 2>&1 && command -v gpgv >/dev/null 2>&1; then
     fail "Clearsigned cache hit downloaded the image again"
   pass "Fedora clearsigned CHECKSUM gates both cache publication and every cache hit"
 
-  cp -- "$clear_signed_file" "$TMP_ROOT/Fedora-CHECKSUM.tampered"
-  printf 'tampered\n' >> "$TMP_ROOT/Fedora-CHECKSUM.tampered"
+  tampered_digest=$(printf '%064d' 0)
+  sed "s/$digest/$tampered_digest/" "$clear_signed_file" > "$TMP_ROOT/Fedora-CHECKSUM.tampered"
+  [[ "$(<"$TMP_ROOT/Fedora-CHECKSUM.tampered")" != "$(<"$clear_signed_file")" ]] ||
+    fail "Could not mutate the signed Fedora CHECKSUM payload"
   export FAKE_CHECKSUM_SOURCE="$TMP_ROOT/Fedora-CHECKSUM.tampered"
   descriptor_tampered=$(jq '.release="40.6"' <<< "$descriptor_clearsigned")
   if pf_image_acquire fedora "$descriptor_tampered" >/dev/null 2>&1; then
