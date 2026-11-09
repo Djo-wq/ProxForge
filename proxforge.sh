@@ -312,8 +312,9 @@ main() {
         shift ;;
       --help|-h) usage; return 0 ;;
       --version)
-        printf 'ProxForge %s (Module API %s)\n' "$PF_CORE_VERSION" "$PF_CORE_MODULE_API_VERSION"
-        return 0 ;;
+        command=version
+        shift
+        break ;;
       --) shift; break ;;
       -*)
         pf_core_error "Unknown global option: $1"
