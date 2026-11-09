@@ -867,7 +867,7 @@ pf_image_cache_list() {
   pf_image_init || return 1
   shopt -q nullglob && nullglob_was_set=1
   shopt -s nullglob
-  image_files=("${PF_IMAGE_CACHE_DIR}"/*/*/*.qcow2 "${PF_IMAGE_CACHE_DIR}"/*/*/*.raw)
+  image_files=("${PF_IMAGE_CACHE_DIR}"/*/*/*/*.qcow2 "${PF_IMAGE_CACHE_DIR}"/*/*/*/*.raw)
   (( nullglob_was_set == 1 )) || shopt -u nullglob
 
   for file in "${image_files[@]}"; do
