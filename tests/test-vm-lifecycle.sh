@@ -46,6 +46,9 @@ PF_FAKE_START_COUNT=0
 PF_FAKE_FAIL_CREATE=false
 PF_FAKE_FAIL_IMPORT=false
 PF_FAKE_FAIL_ATTACH=false
+PF_FAKE_BLOCK_DESTROY=false
+PF_FAKE_DESTROY_COUNT=0
+PF_FAKE_VM_STATUS=stopped
 
 pf_image_acquire() {
   PF_IMAGE_PATH="$IMAGE"
@@ -79,7 +82,10 @@ pf_pve_vm_create() {
   local vmid="$1" name="$2"
   PF_PVE_CREATED_VM_ID="$vmid"
   if [[ "$PF_FAKE_FAIL_CREATE" == "true" ]]; then return 1; fi
-  PF_PVE_CREATED_VM_JSON=$(jq -cn --arg name "$name" '{name:$name,tags:"proxforge"}')
+  PF_FAKE_VM_STATUS="stopped"
+  PF_PVE_CREATED_VM_JSON=$(jq -cn --arg name "$name" --argjson vmid "$vmid" '{
+    name:$name,tags:"proxforge",efidisk0:("local-lvm:vm-" + ($vmid|tostring) + "-disk-efi,efitype=4m")
+  }')
   return 0
 }
 pf_pve_vm_import_disk() {
@@ -101,17 +107,34 @@ pf_pve_vm_attach_imported_disk() {
 pf_pve_vm_configure_cloudinit() { [[ "$1" =~ ^[0-9]+$ && "$2" == "local-lvm" ]]; }
 pf_pve_vm_start() {
   PF_FAKE_START_COUNT=$((PF_FAKE_START_COUNT + 1))
+  PF_FAKE_VM_STATUS="running"
   return 0
 }
 pf_pve_vm_get_config() {
   local vmid="$1"
   PF_PVE_VM_CONFIG_JSON=$(jq -cn --argjson vmid "$vmid" '{
     name:("pf-valid-" + ($vmid|tostring)),tags:"proxforge",
-    scsi0:"local-lvm:vm-system-disk",ide2:"local-lvm:cloudinit"
+    efidisk0:("local-lvm:vm-" + ($vmid|tostring) + "-disk-efi,efitype=4m"),
+    scsi0:("local-lvm:vm-" + ($vmid|tostring) + "-disk-0"),
+    ide2:"local-lvm:cloudinit"
   }')
 }
 pf_pve_vm_get_status() {
-  PF_PVE_VM_STATUS_JSON='{"status":"running"}'
+  PF_PVE_VM_STATUS_JSON=$(jq -cn --arg status "$PF_FAKE_VM_STATUS" '{status:$status}')
+}
+pf_pve_vm_destroy_managed() {
+  local vmid="$1" node="$2" resources="$3"
+  PF_PVE_DESTROY_MUTATION_STARTED=false
+  PF_PVE_DESTROY_ERROR=""
+  if [[ "$PF_FAKE_BLOCK_DESTROY" == "true" || "$PF_FAKE_VM_STATUS" != "stopped" ]]; then
+    PF_PVE_DESTROY_ERROR="Mock rollback preflight refused a running or blocked VM."
+    return 1
+  fi
+  PF_PVE_DESTROY_MUTATION_STARTED=true
+  PF_PVE_DESTROYED_RESOURCES_JSON="$resources"
+  PF_FAKE_DESTROY_COUNT=$((PF_FAKE_DESTROY_COUNT + 1))
+  PF_FAKE_VM_STATUS="absent"
+  return 0
 }
 
 reset_module() {
@@ -126,7 +149,7 @@ pf_vm_lifecycle_deploy valid latest standard local-lvm vmbr0 "" auto > "$RESULT_
 SUCCESS_MANIFEST="$STATE_ROOT/11111111-1111-4111-8111-111111111111/operation.json"
 SUCCESS_EVENTS="$STATE_ROOT/11111111-1111-4111-8111-111111111111/events.jsonl"
 [[ -f "$SUCCESS_MANIFEST" && -f "$SUCCESS_EVENTS" ]] || fail "Operation manifest or event journal was not persisted"
-jq -e '.state=="COMPLETED" and .rollback_status=="NOT_REQUIRED" and .vmid==300 and (.created_resources|length)==2' \
+jq -e '.state=="COMPLETED" and .rollback_status=="NOT_REQUIRED" and .vmid==300 and (.created_resources|length)==4' \
   "$SUCCESS_MANIFEST" >/dev/null || fail "Completed manifest is incomplete"
 jq -se '
   length >= 12 and
@@ -154,20 +177,40 @@ jq -e '.proxforge_managed==true and .system_disk_present==true and .cloudinit_dr
   "$TMP_ROOT/reconcile.json" >/dev/null || fail "Reconcile report did not preserve the no-auto-resume safety policy"
 pass "Reconciliation reports Proxmox state without resuming or rolling back"
 
-# A failure after VM creation is retained for manual reconciliation and is never auto-deleted.
+# A failure after disk import is automatically rolled back when every owned resource is verified.
 reset_module
 PF_FAKE_FAIL_ATTACH=true
+PF_FAKE_BLOCK_DESTROY=false
 PF_VM_OPERATION_ID="22222222-2222-4222-8222-222222222222"
 if pf_vm_lifecycle_deploy valid latest standard local-lvm vmbr0 "" auto >/dev/null 2>&1; then
   fail "Injected disk-attach failure was reported as success"
 fi
 FAILED_MANIFEST="$STATE_ROOT/22222222-2222-4222-8222-222222222222/operation.json"
 FAILED_EVENTS="$STATE_ROOT/22222222-2222-4222-8222-222222222222/events.jsonl"
-jq -e '.state=="FAILED" and .rollback_status=="BLOCKED" and (.created_resources|length)==2' \
-  "$FAILED_MANIFEST" >/dev/null || fail "Failed operation manifest did not preserve owned resources and blocked rollback state"
-jq -se 'any(.[]; .event=="RECONCILIATION_REQUIRED" and .outcome=="FAILURE")' "$FAILED_EVENTS" >/dev/null || fail "Failure journal did not require reconciliation"
+jq -e '.state=="ROLLBACK_COMPLETED" and .rollback_status=="COMPLETED" and (.created_resources|length)==3' \
+  "$FAILED_MANIFEST" >/dev/null || fail "Automatic rollback did not remove the verified operation-owned resources"
+jq -se 'any(.[]; .event=="ROLLBACK_INTENT") and any(.[]; .event=="ROLLBACK_COMPLETED") and any(.[]; .event=="RESOURCE_REMOVED")' \
+  "$FAILED_EVENTS" >/dev/null || fail "Rollback sequence was not persisted"
+[[ "$PF_FAKE_DESTROY_COUNT" == "1" ]] || fail "Automatic rollback did not call the destroy adapter exactly once"
 [[ "$PF_FAKE_START_COUNT" == "1" ]] || fail "Lifecycle continued to VM start after a configuration failure"
-pass "Post-creation failure is journaled for manual reconciliation and prevents VM start"
+pass "Post-creation failure triggers guarded automatic rollback and records each removed resource"
+
+# A failed rollback is blocked without deleting anything, then can be explicitly retried.
+reset_module
+PF_FAKE_FAIL_ATTACH=true
+PF_FAKE_BLOCK_DESTROY=true
+PF_VM_OPERATION_ID="44444444-4444-4444-8444-444444444444"
+if pf_vm_lifecycle_deploy valid latest standard local-lvm vmbr0 "" auto >/dev/null 2>&1; then
+  fail "Blocked rollback scenario was reported as success"
+fi
+BLOCKED_MANIFEST="$STATE_ROOT/44444444-4444-4444-8444-444444444444/operation.json"
+jq -e '.state=="FAILED" and .rollback_status=="BLOCKED"' "$BLOCKED_MANIFEST" >/dev/null || fail "Unsafe rollback did not remain blocked"
+[[ "$PF_FAKE_DESTROY_COUNT" == "1" ]] || fail "Blocked rollback performed a destructive action"
+PF_FAKE_BLOCK_DESTROY=false
+pf_operations_rollback_operation "44444444-4444-4444-8444-444444444444" > "$TMP_ROOT/manual-rollback.json" || fail "Explicit rollback retry failed"
+jq -e '.state=="ROLLBACK_COMPLETED" and .rollback_status=="COMPLETED"' "$BLOCKED_MANIFEST" >/dev/null || fail "Manual rollback retry did not complete"
+[[ "$PF_FAKE_DESTROY_COUNT" == "2" ]] || fail "Manual retry did not call the destroy adapter"
+pass "Blocked rollback is non-destructive and explicit retry completes after the safety gate clears"
 
 # Configuration may request an assembled but stopped VM.
 reset_module
@@ -176,7 +219,7 @@ PF_CORE_CONFIG_JSON=$(jq '.start_vm=false' <<< "$PF_CORE_CONFIG_JSON")
 PF_VM_OPERATION_ID="33333333-3333-4333-8333-333333333333"
 pf_vm_lifecycle_deploy valid latest standard local-lvm vmbr0 "" auto > "$TMP_ROOT/stopped.json" || fail "Stopped-VM lifecycle failed"
 STOPPED_MANIFEST="$STATE_ROOT/33333333-3333-4333-8333-333333333333/operation.json"
-jq -e '.state=="COMPLETED" and .vmid==302' "$STOPPED_MANIFEST" >/dev/null || fail "Stopped VM operation did not complete"
+jq -e '.state=="COMPLETED" and .vmid==302 and (.created_resources|length)==4' "$STOPPED_MANIFEST" >/dev/null || fail "Stopped VM operation did not complete"
 [[ "$PF_FAKE_START_COUNT" == "1" ]] || fail "start_vm=false still started a VM"
 pass "start_vm=false leaves the VM stopped while completing disk and Cloud-Init configuration"
 
