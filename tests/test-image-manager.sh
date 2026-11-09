@@ -201,6 +201,11 @@ if pf_image_init >/dev/null 2>&1; then
 fi
 pass "symlinked cache roots rejected before directory creation"
 
+# Restore the trusted test cache before running the OpenPGP/cache integration cases.
+jq --arg cache "$CACHE_DIR" '.image_cache_dir=$cache' "$CONFIG_FILE" > "$CONFIG_FILE.new"
+mv "$CONFIG_FILE.new" "$CONFIG_FILE"
+pf_core_config_load "$CONFIG_FILE" || fail "Could not restore the trusted image cache fixture"
+
 if pf_image_verify_signature "$TMP_ROOT/nonexistent.sig" "$FAKE_CHECKSUM_FILE" vendor >/dev/null 2>&1; then
   fail "Unknown signing keyring was accepted"
 fi
