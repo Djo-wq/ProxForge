@@ -110,3 +110,33 @@ pf_core_module_load() {
   fi
   pf_core_info "Loaded distribution module: $module_id ($PF_MODULE_VERSION)"
 }
+
+
+pf_core_distributions_list() {
+  local directory module_file module_id output='[]' nullglob_was_set=0
+  local -a directories=()
+  [[ -d "$PF_CORE_DISTRIBUTIONS_DIR" && ! -L "$PF_CORE_DISTRIBUTIONS_DIR" ]] || {
+    pf_core_error "Distribution modules directory is missing or unsafe: $PF_CORE_DISTRIBUTIONS_DIR"
+    return 1
+  }
+  shopt -q nullglob && nullglob_was_set=1
+  shopt -s nullglob
+  directories=("${PF_CORE_DISTRIBUTIONS_DIR}"/*)
+  (( nullglob_was_set == 1 )) || shopt -u nullglob
+
+  for directory in "${directories[@]}"; do
+    [[ -d "$directory" && ! -L "$directory" ]] || continue
+    module_id=$(basename -- "$directory")
+    pf_core_is_safe_id "$module_id" || continue
+    module_file="$directory/module.sh"
+    [[ -f "$module_file" && ! -L "$module_file" && -r "$module_file" ]] || continue
+    if pf_core_check_module_permissions "$directory" "$module_file"; then
+      output=$(jq -c --arg id "$module_id" --arg path "$module_file" \
+        '. + [{id:$id,module_file:$path,loadable:true}]' <<< "$output") || return 1
+    else
+      output=$(jq -c --arg id "$module_id" --arg path "$module_file" \
+        '. + [{id:$id,module_file:$path,loadable:false}]' <<< "$output") || return 1
+    fi
+  done
+  jq . <<< "$output"
+}
