@@ -303,12 +303,22 @@ pf_image_verify_signature() {
   }
   pf_image_check_secure_path "$PF_IMAGE_TRUST_FILE" file || return 1
   jq -e --arg id "$keyring_id" '
-    .schema_version == 1 and (.keyrings | type == "object") and
-    (.keyrings[$id] | type == "object" and
-      (.fingerprints | type == "array" and length > 0 and
-       all(.[]; type == "string" and test("^([A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$"))))
+    type == "object" and
+    (keys - ["schema_version", "keyrings"] | length == 0) and
+    .schema_version == 1 and
+    (.keyrings | type == "object") and
+    (.keyrings as $all |
+      ($all | all(to_entries[];
+        (.key | test("^[a-z][a-z0-9-]{1,31}$")) and
+        (.value | type == "object" and
+          (keys - ["fingerprints"] | length == 0) and
+          (.fingerprints | type == "array" and length > 0 and
+           all(.[]; type == "string" and test("^([A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$")) and
+           (map(ascii_upcase) | length == (unique | length)))
+      )) and
+      ($all[$id] | type == "object" and (.fingerprints | type == "array" and length > 0)))
   ' "$PF_IMAGE_TRUST_FILE" >/dev/null || {
-    pf_image_error "No pinned fingerprints configured for keyring: $keyring_id"
+    pf_image_error "No valid pinned fingerprints configured for keyring: $keyring_id"
     return 1
   }
 
@@ -339,12 +349,15 @@ pf_image_verify_signature() {
   mapfile -t valid_fingerprints < <(awk '$1 == "[GNUPG:]" && $2 == "VALIDSIG" { print toupper($3) }' "$status_file")
   rm -f -- "$status_file" "$error_file"
 
-  for fingerprint in "${valid_fingerprints[@]}"; do
-    if jq -e --arg fp "$fingerprint" 'index($fp) != null' <<< "$expected_json" >/dev/null; then
-      PF_IMAGE_SIGNATURE_FINGERPRINT="$fingerprint"
-      return 0
-    fi
-  done
+  if (( ${#valid_fingerprints[@]} != 1 )); then
+    pf_image_error "Exactly one valid signing fingerprint is required."
+    return 1
+  fi
+  fingerprint="${valid_fingerprints[0]}"
+  if jq -e --arg fp "$fingerprint" 'index($fp) != null' <<< "$expected_json" >/dev/null; then
+    PF_IMAGE_SIGNATURE_FINGERPRINT="$fingerprint"
+    return 0
+  fi
 
   pf_image_error "Signature is valid but its signing fingerprint is not pinned."
   return 1
