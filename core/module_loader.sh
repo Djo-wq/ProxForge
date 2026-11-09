@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 PF_CORE_DISTRIBUTIONS_DIR="${PF_CORE_DISTRIBUTIONS_DIR:-${PF_CORE_ROOT}/distributions}"
 
 pf_core_check_module_permissions() {
@@ -7,7 +6,10 @@ pf_core_check_module_permissions() {
   [[ -d "$PF_CORE_DISTRIBUTIONS_DIR" && ! -L "$PF_CORE_DISTRIBUTIONS_DIR" &&
      -d "$directory" && ! -L "$directory" &&
      -f "$module_file" && ! -L "$module_file" ]] || return 1
-  [[ "${PF_CORE_TEST_MODE:-0}" == "1" ]] && return 0
+
+  if [[ "${PF_CORE_TEST_MODE:-0}" == "1" && "$EUID" != "0" ]]; then
+    return 0
+  fi
 
   for path in "$PF_CORE_DISTRIBUTIONS_DIR" "$directory" "$module_file"; do
     uid=$(stat -c '%u' "$path") || return 1
@@ -35,7 +37,6 @@ pf_core_module_call() {
     pf_core_error "Module function is missing: $function_name"
     return 1
   }
-
   output_file=$(mktemp "${TMPDIR:-/tmp}/proxforge-module-output.XXXXXX") || return 1
   PF_MODULE_RESULT_JSON=""
   if "$function_name" "$@" > "$output_file"; then status=0; else status=$?; fi
@@ -66,7 +67,6 @@ pf_core_module_load() {
     pf_core_error "A module is already loaded for this process: $PF_CORE_LOADED_MODULE"
     return 1
   fi
-
   module_dir="${PF_CORE_DISTRIBUTIONS_DIR}/${module_id}"
   module_file="${module_dir}/module.sh"
   if ! pf_core_check_module_permissions "$module_dir" "$module_file"; then
@@ -74,7 +74,7 @@ pf_core_module_load() {
     return 1
   fi
 
-  # Remove leftovers from a previously rejected load before sourcing a new module.
+  PF_CORE_MODULE_METADATA_JSON="{}"
   unset PF_MODULE_API_VERSION PF_MODULE_ID PF_MODULE_NAME PF_MODULE_FAMILY
   unset PF_MODULE_VERSION PF_MODULE_ARCHES PF_MODULE_RESULT_JSON
   unset -f pf_distro_init pf_distro_list_releases pf_distro_resolve_release
@@ -92,7 +92,6 @@ pf_core_module_load() {
     pf_core_error "Could not load module: $module_id"
     return 1
   }
-
   if ! pf_core_validate_module_metadata "$module_id"; then
     pf_core_error "Module metadata is invalid: $module_id"
     return 1
@@ -104,7 +103,6 @@ pf_core_module_load() {
       return 1
     }
   done
-
   PF_CORE_LOADED_MODULE="$module_id"
   if ! pf_core_module_call pf_distro_init 0; then
     PF_CORE_LOADED_MODULE=""
