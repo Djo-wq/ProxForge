@@ -182,7 +182,7 @@ pf_distro_validate_image() {
       test("^Fedora-Cloud-Base-Generic-(44-1[.]7|45-1[.]4)[.]x86_64[.]qcow2$")) and
     (.checksum_value | type == "string" and test("^[a-f0-9]{64}$")) and
     (.file_size | type == "number" and floor == . and . > 0) and
-    (.source_url | type == "string" and startswith("https://download.fedoraproject.org/"))
+    (.source_url | type == "string" and startswith("https://dl.fedoraproject.org/"))
   ' "$metadata_path" >/dev/null || return 1
 
   release=$(jq -r '.release' "$metadata_path") || return 1
