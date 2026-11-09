@@ -13,7 +13,8 @@ PF_IMAGE_CHECKSUM_MAX_BYTES=8388608
 pf_image_error() { pf_core_error "Image Manager: $*"; }
 
 pf_image_safe_token() {
-  [[ "${1:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$ ]]
+  [[ "${1:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$ &&
+     "${1:-}" != "." && "${1:-}" != ".." ]]
 }
 
 pf_image_url_host() {
@@ -107,6 +108,43 @@ pf_image_validate_descriptor() {
   esac
 }
 
+pf_image_check_cache_path_components() {
+  local component current="" uid mode
+  local -a components=()
+  [[ "$PF_IMAGE_CACHE_DIR" == /* && "$PF_IMAGE_CACHE_DIR" != *//* ]] || return 1
+  [[ "$PF_IMAGE_CACHE_DIR" != *"/../"* && "$PF_IMAGE_CACHE_DIR" != *"/./"* &&
+     "$PF_IMAGE_CACHE_DIR" != */.. && "$PF_IMAGE_CACHE_DIR" != */. ]] || return 1
+
+  IFS='/' read -r -a components <<< "${PF_IMAGE_CACHE_DIR#/}"
+  for component in "${components[@]}"; do
+    [[ -n "$component" ]] || continue
+    current="${current}/${component}"
+    [[ ! -L "$current" ]] || {
+      pf_image_error "Cache path contains a symbolic link: $current"
+      return 1
+    }
+    [[ ! -e "$current" || -d "$current" ]] || {
+      pf_image_error "Cache path component is not a directory: $current"
+      return 1
+    }
+    if [[ -d "$current" && ! ("${PF_IMAGE_TEST_MODE:-0}" == "1" && "$EUID" != "0") ]]; then
+      uid=$(stat -c '%u' "$current") || return 1
+      [[ "$uid" == "0" ]] || {
+        pf_image_error "Cache path parent must be root-owned: $current"
+        return 1
+      }
+      mode=$(stat -c '%a' "$current") || return 1
+      if (( (8#$mode & 0022) != 0 )); then
+        # A sticky root-owned /tmp is safe for unpredictable private test paths.
+        (( (8#$mode & 01000) != 0 && uid == 0 )) || {
+          pf_image_error "Cache path parent is group/world writable: $current"
+          return 1
+        }
+      fi
+    fi
+  done
+}
+
 pf_image_check_secure_path() {
   local path="$1" expected_type="$2" uid mode
   if [[ "$expected_type" == "directory" ]]; then
@@ -143,6 +181,10 @@ pf_image_init() {
     return 1
   }
   PF_IMAGE_CACHE_DIR="${PF_IMAGE_CACHE_DIR%/}"
+  pf_image_check_cache_path_components || {
+    pf_image_error "Image cache path contains an untrusted or unsafe component."
+    return 1
+  }
 
   local command_name
   for command_name in curl flock sha256sum sha512sum qemu-img stat jq date mktemp awk; do
