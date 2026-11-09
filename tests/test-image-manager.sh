@@ -206,4 +206,38 @@ if pf_image_verify_signature "$TMP_ROOT/nonexistent.sig" "$FAKE_CHECKSUM_FILE" v
 fi
 pass "OpenPGP verification fails closed without pinned trusted key material"
 
+if command -v gpg >/dev/null 2>&1 && command -v gpgv >/dev/null 2>&1; then
+  GNUPGHOME="$TMP_ROOT/gnupg"
+  mkdir -m 0700 "$GNUPGHOME"
+  gpg --homedir "$GNUPGHOME" --batch --pinentry-mode loopback --passphrase "" \
+    --quick-generate-key "ProxForge Fixture Signing Key <fixture@example.invalid>" ed25519 sign 0 >/dev/null 2>&1
+  signing_fingerprint=$(gpg --homedir "$GNUPGHOME" --batch --with-colons --fingerprint --list-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+  [[ "$signing_fingerprint" =~ ^[A-Fa-f0-9]{40}$ ]] || fail "Could not generate an OpenPGP test fingerprint"
+  signed_payload="$TMP_ROOT/signed-checksum.txt"
+  signature_file="$TMP_ROOT/signed-checksum.txt.sig"
+  printf 'fixture publisher checksum\n' > "$signed_payload"
+  gpg --homedir "$GNUPGHOME" --batch --yes --pinentry-mode loopback --passphrase "" \
+    --local-user "$signing_fingerprint" --output "$signature_file" --detach-sign "$signed_payload" >/dev/null 2>&1
+  export PF_IMAGE_TRUST_ROOT="$TMP_ROOT/test-trust"
+  export PF_IMAGE_TRUST_FILE="$PF_IMAGE_TRUST_ROOT/keyrings.json"
+  mkdir -m 0750 -p "$PF_IMAGE_TRUST_ROOT/keyrings"
+  gpg --homedir "$GNUPGHOME" --batch --export "$signing_fingerprint" > "$PF_IMAGE_TRUST_ROOT/keyrings/vendor.gpg"
+  jq -n --arg fingerprint "$signing_fingerprint" \
+    '{schema_version:1,keyrings:{vendor:{fingerprints:[$fingerprint]}}}' > "$PF_IMAGE_TRUST_FILE"
+  chmod 0640 "$PF_IMAGE_TRUST_FILE" "$PF_IMAGE_TRUST_ROOT/keyrings/vendor.gpg"
+  chmod 0750 "$PF_IMAGE_TRUST_ROOT" "$PF_IMAGE_TRUST_ROOT/keyrings"
+  pf_image_verify_signature "$signature_file" "$signed_payload" vendor || fail "Correct pinned OpenPGP signature was rejected"
+  [[ "$PF_IMAGE_SIGNATURE_FINGERPRINT" == "$signing_fingerprint" ]] || fail "Verified signing fingerprint was not returned"
+  pass "detached OpenPGP signature accepted for the exact pinned fingerprint"
+
+  jq -n '{schema_version:1,keyrings:{vendor:{fingerprints:["AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]}}}' > "$PF_IMAGE_TRUST_FILE"
+  chmod 0640 "$PF_IMAGE_TRUST_FILE"
+  if pf_image_verify_signature "$signature_file" "$signed_payload" vendor >/dev/null 2>&1; then
+    fail "Valid signature from an unpinned fingerprint was accepted"
+  fi
+  pass "valid OpenPGP signature rejected when its signer fingerprint is not pinned"
+else
+  pass "OpenPGP signing fixture skipped because gpg/gpgv is unavailable"
+fi
+
 pass "Image Manager hermetic tests completed; no real network or Proxmox command used"
