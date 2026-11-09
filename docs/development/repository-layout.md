@@ -1,71 +1,64 @@
 # Organisation du dépôt
 
-## Arborescence principale
+## Arborescence
 
 ```text
-proxmox-scripts/
-├── .github/
-│   ├── pull_request_template.md
-│   └── workflows/tests.yml
-├── config/                 # Configuration par défaut
-├── core/                   # Moteur modulaire Bash
-├── distributions/          # Modules Fedora et Debian
+.
+├── .github/                  # CI et modèles GitHub
+├── src/                      # Runtime de la CLI modulaire
+│   ├── core/                 # Bootstrap, managers et adaptateurs
+│   ├── distributions/        # Modules Fedora et Debian
+│   ├── config/               # Configuration par défaut
+│   ├── profiles/             # Profils de ressources VM
+│   ├── schemas/              # Schémas JSON
+│   ├── trust/                # Registre d'empreintes
+│   └── proxforge.sh          # Implémentation CLI
+├── scripts/                  # Installateur, désinstallateur, provisionnement
+├── tests/                    # Suite hermétique et fixtures
+├── legacy/                   # Scripts autonomes historiques
+│   ├── vm/linux/
+│   ├── vm/windows/
+│   ├── lxc/
+│   ├── network/
+│   └── docker-vm/
 ├── docs/
-│   ├── phases/             # Historique des phases 1 à 9
-│   ├── architecture.md
-│   ├── legacy-scripts.md
-│   ├── phase-10-installation.md
-│   ├── phase-11-final-audit.md
-│   ├── repository-layout.md
-│   └── testing.md
-├── linux/                  # Anciens scripts autonomes (compatibilité)
-├── windows/                # Anciens scripts autonomes (compatibilité)
-├── lxc/                    # Anciens scripts autonomes (compatibilité)
-├── network/                # Anciens scripts autonomes (compatibilité)
-├── Docker-vm/              # Anciens scripts autonomes (compatibilité)
-├── profiles/               # Profils VM JSON
-├── schemas/                # Schémas JSON
-├── scripts/                # Install / uninstall / trust provisioning
-├── tests/                  # Tests, fixtures et runner
-├── trust/                  # Registre d'empreintes
-├── proxforge.sh            # Entrée CLI
-├── Makefile                # Cibles help / test / lint / check
+│   ├── architecture/
+│   ├── development/
+│   ├── legacy/
+│   └── phases/
+├── proxforge.sh              # Lanceur de compatibilité
+├── Makefile
 ├── CONTRIBUTING.md
-├── .editorconfig
-├── .gitignore
 ├── LICENSE
 └── README.md
 ```
 
-## Deux ensembles de scripts distincts
+## Responsabilités
 
-### CLI modulaire (chemin recommandé)
+### `src/` — application maintenue
 
-Les répertoires `core/`, `distributions/`, `profiles/`, `config/`,
-`schemas/`, `trust/` et le fichier `proxforge.sh` forment le moteur courant.
-L'installateur `scripts/install.sh` copie explicitement ces chemins dans la
-structure système. Leurs emplacements sont donc des interfaces runtime stables.
+Tout le runtime de la CLI modulaire est regroupé dans `src/`. Les chemins internes sont relatifs à cette racine et le bootstrap la déduit de son propre emplacement. Le lanceur racine reste un point d'entrée stable pour éviter de changer les commandes documentées.
 
-### Anciens scripts autonomes
+### `scripts/` — opérations de maintenance
 
-Les répertoires `linux/`, `windows/`, `lxc/`, `network/` et
-`Docker-vm/` sont conservés à leurs chemins historiques pour ne pas casser
-les commandes déjà utilisées ou les liens vers des fichiers. Ils ne sont pas
-des modules de la CLI et ne bénéficient pas automatiquement de ses politiques,
-de son journal d'opérations ou de sa couverture de tests.
+Les scripts d'installation, de désinstallation et de provisionnement restent à la racine du dépôt parce qu'ils sont des outils de maintenance du projet, et non des composants du runtime.
 
-La note [Anciens scripts autonomes](legacy-scripts.md) précise cette séparation.
-Les nouveaux développements doivent viser la CLI modulaire, sauf demande
-explicite de maintenance de ces scripts.
+### `tests/` — validation hermétique
 
-## Pourquoi les composants runtime restent à la racine
+Les tests restent regroupés dans un répertoire avec un runner commun et des fixtures explicites. Ils ne sont pas lancés sur un véritable cluster Proxmox.
 
-L'installateur `scripts/install.sh` copie explicitement les dossiers runtime
-et le point d'entrée depuis la racine du dépôt. Plusieurs composants résolvent
-également leurs chemins à partir de `BASH_SOURCE`. Déplacer les dossiers
-runtime sans mettre à jour simultanément ces références, l'installateur et les
-tests casserait l'installation.
+### `legacy/` — scripts historiques
 
-La documentation et les outils de développement peuvent être regroupés librement.
-Les chemins runtime doivent en revanche être traités comme une interface
-stable et déplacés uniquement dans une migration dédiée avec tests de compatibilité.
+Les anciens scripts sont triés par type de ressource et domaine. Ils restent isolés du code maintenu pour ne pas confondre les scripts autonomes avec les modules de la CLI.
+
+### `docs/` — documentation
+
+Les guides sont organisés par sujet. Les rapports des phases 1 à 11 sont regroupés dans `docs/phases/`.
+
+## Règles d'organisation
+
+- Toute nouvelle fonctionnalité de la CLI doit être placée dans `src/` et accompagnée de tests hermétiques.
+- Les modules de distribution doivent rester sous `src/distributions/<id>/`.
+- Les scripts historiques ne doivent pas être ajoutés à `src/`.
+- L'installateur doit copier le lanceur et le dossier `src/` comme un ensemble.
+- Toute modification de la structure doit être accompagnée d'une mise à jour de la documentation et de la CI.

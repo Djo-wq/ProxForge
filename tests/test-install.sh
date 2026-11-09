@@ -33,9 +33,9 @@ grep -q 'complete -F _proxforge_complete proxforge.sh' "$TMP_ROOT/installed-comp
   fail "Installed CLI completion output is incomplete"
 
 # Simulate a locally provisioned trusted Fedora keyring and confirm upgrades retain it.
-mkdir -p "$LIB/trust/keyrings"
-printf 'locally provisioned pinned public key bundle\n' > "$LIB/trust/keyrings/fedora-release.gpg"
-chmod 0640 "$LIB/trust/keyrings/fedora-release.gpg"
+mkdir -p "$LIB/src/trust/keyrings"
+printf 'locally provisioned pinned public key bundle\n' > "$LIB/src/trust/keyrings/fedora-release.gpg"
+chmod 0640 "$LIB/src/trust/keyrings/fedora-release.gpg"
 
 pass "Staged install creates secure FHS paths, configuration and relocatable CLI links"
 
@@ -44,7 +44,7 @@ cat "$TMP_ROOT/config.json" > "$CONFIG"
 bash "$ROOT_DIR/scripts/install.sh" --prefix "$PREFIX" >/dev/null || fail "Idempotent staged upgrade failed"
 jq -e '.log_level=="DEBUG"' "$CONFIG" >/dev/null || fail "Upgrade overwrote the administrator configuration"
 [[ -f "$LIB/.proxforge-install-manifest" ]] || fail "Upgrade lost its install manifest"
-cmp -s "$LIB/trust/keyrings/fedora-release.gpg" <(printf 'locally provisioned pinned public key bundle\n') ||
+cmp -s "$LIB/src/trust/keyrings/fedora-release.gpg" <(printf 'locally provisioned pinned public key bundle\n') ||
   fail "Upgrade did not preserve the locally provisioned Fedora keyring"
 pass "Repeated installation is idempotent and preserves administrator configuration"
 

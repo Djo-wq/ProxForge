@@ -10,5 +10,5 @@ Ce dossier contient les utilitaires d'installation système de la CLI modulaire 
   compare ses empreintes au registre versionné. Cette opération doit être
   demandée explicitement.
 
-Consulter [la procédure d'installation](../docs/phase-10-installation.md)
+Consulter [la procédure d'installation](../docs/phases/phase-10-installation.md)
 avant une installation sur un hôte réel.
