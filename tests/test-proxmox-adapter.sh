@@ -201,12 +201,30 @@ pf_pve_vm_import_disk 300 "$IMAGE" local-lvm || fail "Verified image import prim
 [[ "$PF_PVE_IMPORTED_VOLUME" == "local-lvm:vm-300-disk-0" ]] || fail "Imported volume identifier mismatch"
 pass "Import validates image metadata, digest and disk format; records exact new unused volume"
 
+# An existing system disk must never be silently overwritten.
+jq '. + {scsi0:"local-lvm:pre-existing-system-disk"}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
+cp "$FAKE_VM_CONFIG" "$FAKE_VM_CONFIG.before"
+mv "$FAKE_VM_CONFIG.new" "$FAKE_VM_CONFIG"
+if pf_pve_vm_attach_imported_disk 300 scsi0 "$PF_PVE_IMPORTED_VOLUME" >/dev/null 2>&1; then
+  fail "An existing scsi0 system disk was overwritten"
+fi
+mv "$FAKE_VM_CONFIG.before" "$FAKE_VM_CONFIG"
+
+# The import result must also still be present in an unused slot.
+jq '.unused0="local-lvm:some-other-volume"' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
+mv "$FAKE_VM_CONFIG.new" "$FAKE_VM_CONFIG"
+if pf_pve_vm_attach_imported_disk 300 scsi0 "$PF_PVE_IMPORTED_VOLUME" >/dev/null 2>&1; then
+  fail "A volume no longer present in an unused slot was attached"
+fi
+jq --arg volume "$PF_PVE_IMPORTED_VOLUME" '.unused0=$volume' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
+mv "$FAKE_VM_CONFIG.new" "$FAKE_VM_CONFIG"
+
 pf_pve_vm_attach_imported_disk 300 scsi0 "$PF_PVE_IMPORTED_VOLUME" || fail "Imported disk attach failed"
 [[ "$(jq -r '.scsi0' "$FAKE_VM_CONFIG")" == "$PF_PVE_IMPORTED_VOLUME" ]] || fail "Imported disk was not attached to scsi0"
 if pf_pve_vm_attach_imported_disk 300 scsi0 local-lvm:vm-300-disk-99 >/dev/null 2>&1; then
   fail "An unrelated volume was accepted for attachment"
 fi
-pass "Only the exact imported volume can be attached to the VM"
+pass "Existing scsi0 protected; only the exact current unused volume can be attached"
 
 pf_pve_vm_configure_cloudinit 300 local-lvm || fail "Cloud-Init configuration failed"
 [[ "$(jq -r '.ide2' "$FAKE_VM_CONFIG")" == "local-lvm:cloudinit" ]] || fail "Cloud-Init drive not attached"
