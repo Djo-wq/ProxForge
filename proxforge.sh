@@ -117,6 +117,9 @@ module_command() {
         [[ "$(jq -r '.channel' <<< "$release_json")" == "stable" ]] || continue
         case "$(jq -r '.status' <<< "$release_json")" in supported|maintenance) ;; *) continue ;; esac
         version=$(jq -r '.version' <<< "$release_json") || return 1
+        pf_core_module_call pf_distro_resolve_release 1 "$version" || return 1
+        jq -e --arg version "$version" '.version==$version and .channel=="stable" and (.status=="supported" or .status=="maintenance")' \
+          <<< "$PF_MODULE_RESULT_JSON" >/dev/null || return 1
         pf_core_module_call pf_distro_get_image 1 "$version" "${PF_MODULE_ARCHES[0]}" || return 1
         descriptor="$PF_MODULE_RESULT_JSON"
         method=$(jq -r '.verification.method' <<< "$descriptor") || return 1
@@ -219,6 +222,10 @@ image_command() {
 }
 
 deploy_command() {
+  if (( $# == 2 )) && [[ "$2" == "--help" || "$2" == "-h" || "$2" == "help" ]]; then
+    usage_deploy
+    return 0
+  fi
   local distribution release profile storage bridge name="" vmid=auto
   local positional_name="" positional_vmid="" option_name=false option_vmid=false
   (( $# >= 6 )) || { usage_deploy >&2; return "$PF_EXIT_ARGUMENTS"; }
