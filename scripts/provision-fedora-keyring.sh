@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-REGISTRY="$ROOT_DIR/trust/keyrings.json"
-TARGET_DIR="$ROOT_DIR/trust/keyrings"
+REGISTRY="$ROOT_DIR/src/trust/keyrings.json"
+TARGET_DIR="$ROOT_DIR/src/trust/keyrings"
 TARGET_FILE="$TARGET_DIR/fedora-release.gpg"
 SOURCE_URL="https://fedoraproject.org/fedora.gpg"
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/proxforge-fedora-keyring.XXXXXX")

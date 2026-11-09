@@ -123,13 +123,13 @@ else
   if [[ "$PROVISION_FEDORA_KEYRING" == "true" ]]; then require_command gpg; fi
 fi
 
-for src in proxforge.sh core distributions profiles config schemas trust scripts docs; do
+for src in proxforge.sh src scripts docs; do
   [[ -e "$ROOT_DIR/$src" && ! -L "$ROOT_DIR/$src" ]] || fail "required source path is missing or unsafe: $src"
   if find "$ROOT_DIR/$src" -type l -print -quit | grep -q .; then
     fail "source path contains a symbolic link: $src"
   fi
 done
-[[ -f "$ROOT_DIR/config/defaults.json" && -f "$ROOT_DIR/proxforge.sh" ]] || fail "source tree is incomplete."
+[[ -f "$ROOT_DIR/src/config/defaults.json" && -f "$ROOT_DIR/proxforge.sh" && -f "$ROOT_DIR/src/proxforge.sh" ]] || fail "source tree is incomplete."
 
 LIB_DIR=$(prefix_path /usr/local/lib/proxforge)
 LIB_PARENT=$(dirname -- "$LIB_DIR")
@@ -189,26 +189,26 @@ rollback() {
 }
 trap rollback EXIT
 
-for item in proxforge.sh core distributions profiles config schemas trust scripts docs; do
+for item in proxforge.sh src scripts docs; do
   cp -a -- "$ROOT_DIR/$item" "$STAGE/"
 done
 
 # Keep locally provisioned key material across upgrades; never replace it with
 # repository contents and never follow links while copying this trust directory.
-if [[ -d "$LIB_DIR/trust/keyrings" && ! -L "$LIB_DIR/trust/keyrings" ]]; then
-  if find "$LIB_DIR/trust/keyrings" -type l -print -quit | grep -q .; then
+if [[ -d "$LIB_DIR/src/trust/keyrings" && ! -L "$LIB_DIR/src/trust/keyrings" ]]; then
+  if find "$LIB_DIR/src/trust/keyrings" -type l -print -quit | grep -q .; then
     fail "existing Fedora keyring directory contains symbolic links."
   fi
-  mkdir -p -- "$STAGE/trust/keyrings"
-  cp -a -- "$LIB_DIR/trust/keyrings/." "$STAGE/trust/keyrings/"
+  mkdir -p -- "$STAGE/src/trust/keyrings"
+  cp -a -- "$LIB_DIR/src/trust/keyrings/." "$STAGE/src/trust/keyrings/"
 fi
 
 printf '%s\n' 'proxforge-managed-install-v1' > "$STAGE/.proxforge-install-manifest"
 find "$STAGE" -type d -exec chmod 0755 {} +
 find "$STAGE" -type f -exec chmod 0644 {} +
-chmod 0755 "$STAGE/proxforge.sh"
+chmod 0755 "$STAGE/proxforge.sh" "$STAGE/src/proxforge.sh"
 find "$STAGE/scripts" -type f -name '*.sh' -exec chmod 0750 {} +
-[[ -d "$STAGE/trust/keyrings" ]] && chmod 0750 "$STAGE/trust/keyrings"
+[[ -d "$STAGE/src/trust/keyrings" ]] && chmod 0750 "$STAGE/src/trust/keyrings"
 
 mkdir -p -- "$VAR_DIR/cache" "$VAR_DIR/tmp" "$VAR_DIR/state" "$LOG_DIR"
 chmod 0750 "$VAR_DIR" "$VAR_DIR/cache" "$LOG_DIR"
@@ -217,7 +217,7 @@ chmod 0700 "$VAR_DIR/tmp" "$VAR_DIR/state"
 if [[ -e "$CONFIG_FILE" || -L "$CONFIG_FILE" ]]; then
   [[ -f "$CONFIG_FILE" && ! -L "$CONFIG_FILE" ]] || fail "existing configuration is not a regular file: $CONFIG_FILE"
 else
-  install -m 0640 -- "$ROOT_DIR/config/defaults.json" "$CONFIG_FILE"
+  install -m 0640 -- "$ROOT_DIR/src/config/defaults.json" "$CONFIG_FILE"
   CONFIG_CREATED=true
 fi
 chmod 0640 "$CONFIG_FILE"
