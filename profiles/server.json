@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "server",
+  "name": "Server",
+  "description": "Preset matériel serveur de départ.",
+  "cpu_cores": 4,
+  "memory_mb": 4096,
+  "disk_gb": 40,
+  "machine": "q35",
+  "firmware": "ovmf",
+  "scsi_controller": "virtio-scsi-pci",
+  "network_model": "virtio",
+  "agent_enabled": true,
+  "secure_boot": false
+}

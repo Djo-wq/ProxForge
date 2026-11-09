@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "minimal",
+  "name": "Minimal",
+  "description": "Preset matériel minimal de départ.",
+  "cpu_cores": 1,
+  "memory_mb": 1024,
+  "disk_gb": 8,
+  "machine": "q35",
+  "firmware": "ovmf",
+  "scsi_controller": "virtio-scsi-pci",
+  "network_model": "virtio",
+  "agent_enabled": true,
+  "secure_boot": false
+}

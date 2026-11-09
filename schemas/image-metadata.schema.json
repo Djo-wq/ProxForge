@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxforge.invalid/schemas/image-metadata.schema.json",
+  "title": "ProxForge cached image metadata",
+  "description": "Sidecar metadata for an image that has already passed the configured verification policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "distribution", "release", "architecture",
+    "source_url", "filename", "download_format", "archive_format",
+    "disk_format", "file_size", "checksum_algorithm", "checksum_value",
+    "verification_method", "verification_result", "trust_level",
+    "verification_date", "publication_identifier", "cached_at"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "distribution": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$"},
+    "release": {"type": "string", "minLength": 1, "maxLength": 64},
+    "architecture": {"type": "string", "enum": ["x86_64"]},
+    "source_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+    "filename": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"},
+    "download_format": {"type": "string", "const": "file"},
+    "archive_format": {"type": "string", "const": "none"},
+    "disk_format": {"type": "string", "enum": ["raw", "qcow2"]},
+    "file_size": {"type": "integer", "minimum": 1},
+    "checksum_algorithm": {"type": "string", "enum": ["sha256", "sha512"]},
+    "checksum_value": {
+      "type": "string",
+      "oneOf": [
+        {"pattern": "^[A-Fa-f0-9]{64}$"},
+        {"pattern": "^[A-Fa-f0-9]{128}$"}
+      ]
+    },
+    "verification_method": {"type": "string", "enum": ["signed-checksum", "official-tls-checksum"]},
+    "verification_result": {"type": "boolean", "const": true},
+    "trust_level": {"type": "string", "enum": ["signed", "official_tls"]},
+    "verification_date": {"type": "string", "format": "date-time"},
+    "publication_identifier": {"type": "string", "minLength": 1, "maxLength": 160},
+    "cached_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"checksum_algorithm": {"const": "sha256"}}},
+      "then": {"properties": {"checksum_value": {"pattern": "^[A-Fa-f0-9]{64}$"}}}
+    },
+    {
+      "if": {"properties": {"checksum_algorithm": {"const": "sha512"}}},
+      "then": {"properties": {"checksum_value": {"pattern": "^[A-Fa-f0-9]{128}$"}}}
+    },
+    {
+      "if": {"properties": {"verification_method": {"const": "signed-checksum"}}},
+      "then": {"properties": {"trust_level": {"const": "signed"}}}
+    },
+    {
+      "if": {"properties": {"verification_method": {"const": "official-tls-checksum"}}},
+      "then": {"properties": {"trust_level": {"const": "official_tls"}}}
+    }
+  ]
+}

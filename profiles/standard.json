@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "standard",
+  "name": "Standard",
+  "description": "Preset matériel standard de départ.",
+  "cpu_cores": 2,
+  "memory_mb": 2048,
+  "disk_gb": 20,
+  "machine": "q35",
+  "firmware": "ovmf",
+  "scsi_controller": "virtio-scsi-pci",
+  "network_model": "virtio",
+  "agent_enabled": true,
+  "secure_boot": false
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "heavy",
+  "name": "Heavy",
+  "description": "Preset matériel renforcé de départ.",
+  "cpu_cores": 8,
+  "memory_mb": 8192,
+  "disk_gb": 100,
+  "machine": "q35",
+  "firmware": "ovmf",
+  "scsi_controller": "virtio-scsi-pci",
+  "network_model": "virtio",
+  "agent_enabled": true,
+  "secure_boot": false
+}

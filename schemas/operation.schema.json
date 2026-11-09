@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxforge.invalid/schemas/operation.schema.json",
+  "title": "ProxForge operation manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "operation_id", "created_at", "updated_at",
+    "state", "vmid", "node", "distribution", "release", "profile",
+    "image_digest", "storage", "created_resources", "rollback_status"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "operation_id": {"type": "string", "format": "uuid"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "state": {
+      "type": "string",
+      "enum": [
+        "INITIALIZING", "VALIDATING", "MODULE_LOADING", "IMAGE_RESOLVING",
+        "IMAGE_DOWNLOADING", "IMAGE_VERIFYING", "VM_CREATING",
+        "DISK_IMPORTING", "VM_CONFIGURING", "CLOUD_INIT_CONFIGURING",
+        "VM_STARTING", "COMPLETED", "FAILED", "ROLLBACK_REQUIRED",
+        "ROLLING_BACK", "ROLLBACK_COMPLETED", "ROLLBACK_INCOMPLETE"
+      ]
+    },
+    "vmid": {"type": "integer", "minimum": 100, "maximum": 999999999},
+    "node": {"type": "string", "minLength": 1, "maxLength": 128},
+    "distribution": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$"},
+    "release": {"type": "string", "minLength": 1, "maxLength": 64},
+    "profile": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$"},
+    "image_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "storage": {"type": "string", "minLength": 1, "maxLength": 128},
+    "rollback_mode": {"type": "string", "enum": ["auto", "keep"]},
+    "rollback_status": {
+      "type": "string",
+      "enum": ["NOT_REQUIRED", "PENDING", "IN_PROGRESS", "COMPLETED", "INCOMPLETE", "BLOCKED"]
+    },
+    "created_resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource_type", "created_at", "ownership_verified"],
+        "properties": {
+          "resource_type": {"type": "string", "enum": ["vm", "volume", "cloudinit", "efi", "snippet", "other"]},
+          "volid": {"type": "string", "minLength": 1, "maxLength": 255},
+          "storage": {"type": "string", "minLength": 1, "maxLength": 128},
+          "role": {"type": "string", "minLength": 1, "maxLength": 64},
+          "slot": {"type": "string", "minLength": 1, "maxLength": 64},
+          "vmid": {"type": "integer", "minimum": 100, "maximum": 999999999},
+          "node": {"type": "string", "minLength": 1, "maxLength": 128},
+          "created_at": {"type": "string", "format": "date-time"},
+          "ownership_verified": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}
