@@ -128,7 +128,7 @@ pf_distro_get_image() {
     --arg release "$release" \
     --arg keyring "$PF_FEDORA_SIGNING_KEYRING" \
     --arg image_host "$PF_FEDORA_IMAGE_HOST" \
-    --arg mirror_host "$PF_FEDORA_IMAGE_HOST" '{
+    '{
       url:$url,
       filename:$filename,
       allowed_hosts:[$image_host],
