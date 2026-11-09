@@ -583,3 +583,241 @@ pf_pve_vm_start() {
   }
   pf_core_info "VM $vmid is running."
 }
+
+
+PF_PVE_DESTROY_MUTATION_STARTED=false
+PF_PVE_DESTROYED_RESOURCES_JSON="[]"
+PF_PVE_DESTROY_ERROR=""
+
+pf_pve_volume_reference_check() {
+  local target_vmid="$1" target_node="$2" volume="$3"
+  local guests_json guest_vmid guest_node guest_type config_path config_json
+  pf_pve_api_get /cluster/resources --type vm || return 2
+  guests_json="$PF_PVE_API_RESULT_JSON"
+  jq -e 'type == "array" and all(.[]; type == "object" and has("vmid") and has("node") and has("type"))' \
+    <<< "$guests_json" >/dev/null || return 2
+
+  while IFS=$'\t' read -r guest_vmid guest_node guest_type; do
+    [[ -n "$guest_vmid" && -n "$guest_node" && -n "$guest_type" ]] || continue
+    [[ "$guest_vmid" != "$target_vmid" ]] || continue
+    pf_pve_valid_node "$guest_node" || return 2
+    case "$guest_type" in qemu|lxc) ;; *) continue ;; esac
+    config_path="/nodes/$guest_node/$guest_type/$guest_vmid/config"
+    pf_pve_api_get "$config_path" || return 2
+    config_json="$PF_PVE_API_RESULT_JSON"
+    if jq -e --arg volume "$volume" '
+      type == "object" and
+      any(to_entries[];
+        (.key | test("^(scsi|sata|virtio|ide|efidisk|tpmstate|unused)[0-9]+$")) and
+        (.value | type == "string" and (split(",")[0] == $volume))
+      )
+    ' <<< "$config_json" >/dev/null; then
+      return 0
+    fi
+  done < <(jq -r '.[] | select(.type == "qemu" or .type == "lxc") | [.vmid,.node,.type] | @tsv' <<< "$guests_json")
+  return 1
+}
+
+pf_pve_storage_has_owned_volume() {
+  local node="$1" storage="$2" volid="$3" vmid="$4" content
+  pf_pve_api_get "/nodes/$node/storage/$storage/content" || return 2
+  content="$PF_PVE_API_RESULT_JSON"
+  jq -e 'type == "array"' <<< "$content" >/dev/null || return 2
+  jq -e --arg volid "$volid" --argjson vmid "$vmid" '
+    any(.[]; .volid == $volid and ((.vmid | tonumber?) == $vmid))
+  ' <<< "$content" >/dev/null
+}
+
+pf_pve_vm_destroy_managed() {
+  local vmid="$1" target_node="$2" resources_json="$3"
+  local vm_exists vm_type config_json snapshots_json disk_entries
+  local resource_json volid storage check_rc
+  PF_PVE_DESTROY_MUTATION_STARTED=false
+  PF_PVE_DESTROYED_RESOURCES_JSON="[]"
+  PF_PVE_DESTROY_ERROR=""
+
+  pf_pve_require_initialized || return 1
+  pf_pve_valid_vmid "$vmid" || return 1
+  pf_pve_valid_node "$target_node" || return 1
+  [[ "$target_node" == "$PF_PVE_NODE" ]] || {
+    PF_PVE_DESTROY_ERROR="Operation node differs from selected node."
+    pf_pve_error "$PF_PVE_DESTROY_ERROR"
+    return 1
+  }
+
+  if ! jq -e --argjson vmid "$vmid" --arg node "$target_node" '
+    type == "array" and length > 0 and
+    ([.[] | select(.resource_type == "vm" and .vmid == $vmid and .node == $node and .ownership_verified == true)] | length == 1) and
+    all(.[]; .vmid == $vmid and .ownership_verified == true and
+      (if .resource_type == "vm" then .node == $node
+       elif .resource_type == "cloudinit" then
+         (.slot == "ide2" and (.storage | type == "string") and .volid == (.storage + ":cloudinit"))
+       elif .resource_type == "volume" or .resource_type == "efi" then
+         (.volid | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}:[A-Za-z0-9_./+-]+$")) and
+         (.storage | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$")) and
+         (. as $r | $r.volid | startswith($r.storage + ":"))
+       else false end)
+    )
+  ' <<< "$resources_json" >/dev/null; then
+    PF_PVE_DESTROY_ERROR="Manifest does not prove ownership of every resource."
+    pf_pve_error "$PF_PVE_DESTROY_ERROR"
+    return 1
+  fi
+
+  PF_PVE_RESOURCES_JSON=""
+  pf_pve_refresh_inventory || {
+    PF_PVE_DESTROY_ERROR="Could not refresh cluster inventory."
+    return 1
+  }
+  vm_exists=$(jq -r --argjson vmid "$vmid" '[.[] | select((.vmid | tonumber?) == $vmid)] | length' \
+    <<< "$PF_PVE_RESOURCES_JSON") || return 1
+
+  if (( vm_exists > 0 )); then
+    vm_type=$(jq -r --argjson vmid "$vmid" '.[] | select((.vmid | tonumber?) == $vmid) | .type' \
+      <<< "$PF_PVE_RESOURCES_JSON" | head -n1)
+    [[ "$vm_type" == "qemu" ]] || {
+      PF_PVE_DESTROY_ERROR="VMID exists but is not a QEMU VM."
+      pf_pve_error "$PF_PVE_DESTROY_ERROR"
+      return 1
+    }
+    pf_pve_vm_is_managed "$vmid" || {
+      PF_PVE_DESTROY_ERROR="VM is not verifiably tagged ProxForge-managed."
+      return 1
+    }
+    config_json="$PF_PVE_VM_CONFIG_JSON"
+    pf_pve_vm_get_status "$vmid" || return 1
+    [[ "$(jq -r '.status // empty' <<< "$PF_PVE_VM_STATUS_JSON")" == "stopped" ]] || {
+      PF_PVE_DESTROY_ERROR="VM is not stopped; rollback will never force-stop it."
+      pf_pve_error "$PF_PVE_DESTROY_ERROR"
+      return 1
+    }
+    pf_pve_api_get "/nodes/$target_node/qemu/$vmid/snapshot" || {
+      PF_PVE_DESTROY_ERROR="Could not inspect snapshots; refusing cleanup."
+      return 1
+    }
+    snapshots_json="$PF_PVE_API_RESULT_JSON"
+    jq -e 'type == "array" and all(.[]; .name == "current" or (.name | type == "string"))' \
+      <<< "$snapshots_json" >/dev/null || {
+      PF_PVE_DESTROY_ERROR="Snapshot inventory is malformed."
+      return 1
+    }
+    if jq -e 'any(.[]; .name != "current")' <<< "$snapshots_json" >/dev/null; then
+      PF_PVE_DESTROY_ERROR="VM has snapshots; rollback will not remove them."
+      pf_pve_error "$PF_PVE_DESTROY_ERROR"
+      return 1
+    fi
+
+    disk_entries=$(jq -cn --argjson config "$config_json" '
+      [$config | to_entries[] |
+        select(.key | test("^(scsi|sata|virtio|ide|efidisk|tpmstate|unused)[0-9]+$")) |
+        select(.value | type == "string") |
+        {slot:.key,raw:.value,volid:(.value | split(",")[0])}]
+    ') || return 1
+    if ! jq -e --argjson owners "$resources_json" --argjson entries "$disk_entries" '
+      all($entries[]; . as $disk |
+        if ($disk.raw | test("(^|,)media=cdrom(,|$)")) or $disk.volid == "none" then true
+        elif $disk.slot == "ide2" and ($disk.volid | endswith(":cloudinit")) then
+          any($owners[]; .resource_type == "cloudinit" and .slot == $disk.slot and .volid == $disk.volid)
+        else
+          any($owners[]; (.resource_type == "volume" or .resource_type == "efi") and .volid == $disk.volid)
+        end
+      ) and
+      all($owners[] | select(.resource_type == "volume" or .resource_type == "efi"); . as $owner |
+        any($entries[]; .volid == $owner.volid)
+      )
+    ' <<< "$resources_json" >/dev/null; then
+      PF_PVE_DESTROY_ERROR="VM contains disks not covered by its ownership manifest, or the manifest references disks no longer in its config."
+      pf_pve_error "$PF_PVE_DESTROY_ERROR"
+      return 1
+    fi
+  fi
+
+  while IFS= read -r resource_json; do
+    [[ -n "$resource_json" ]] || continue
+    volid=$(jq -r '.volid' <<< "$resource_json") || return 1
+    storage=$(jq -r '.storage' <<< "$resource_json") || return 1
+    pf_pve_valid_storage_id "$storage" || return 1
+    [[ "$volid" == "$storage:"* ]] || return 1
+
+    if pf_pve_volume_reference_check "$vmid" "$target_node" "$volid"; then
+      PF_PVE_DESTROY_ERROR="Volume $volid is referenced by another guest."
+      pf_pve_error "$PF_PVE_DESTROY_ERROR"
+      return 1
+    else
+      check_rc=$?
+      (( check_rc == 1 )) || {
+        PF_PVE_DESTROY_ERROR="Could not prove $volid is unreferenced."
+        pf_pve_error "$PF_PVE_DESTROY_ERROR"
+        return 1
+      }
+    fi
+
+    if pf_pve_storage_has_owned_volume "$target_node" "$storage" "$volid" "$vmid"; then
+      :
+    else
+      check_rc=$?
+      (( check_rc == 1 )) && continue
+      PF_PVE_DESTROY_ERROR="Could not verify storage ownership of $volid."
+      pf_pve_error "$PF_PVE_DESTROY_ERROR"
+      return 1
+    fi
+  done < <(jq -c '.[] | select(.resource_type == "volume" or .resource_type == "efi")' <<< "$resources_json")
+
+  if (( vm_exists > 0 )); then
+    PF_PVE_DESTROY_MUTATION_STARTED=true
+    if ! qm destroy "$vmid" --purge 1; then
+      PF_PVE_DESTROY_ERROR="qm destroy failed; outcome requires reconciliation."
+      pf_pve_error "$PF_PVE_DESTROY_ERROR"
+      return 1
+    fi
+    PF_PVE_RESOURCES_JSON=""
+    pf_pve_refresh_inventory || {
+      PF_PVE_DESTROY_ERROR="VM destroy requested, but cluster absence could not be verified."
+      return 1
+    }
+    if jq -e --argjson vmid "$vmid" 'any(.[]; (.vmid | tonumber?) == $vmid)' \
+      <<< "$PF_PVE_RESOURCES_JSON" >/dev/null; then
+      PF_PVE_DESTROY_ERROR="VM still appears in cluster inventory after qm destroy."
+      return 1
+    fi
+  fi
+
+  # qm destroy normally removes owned volumes. Free only exact leftovers that
+  # still report this VMID and have no reference from another guest.
+  while IFS= read -r resource_json; do
+    [[ -n "$resource_json" ]] || continue
+    volid=$(jq -r '.volid' <<< "$resource_json") || return 1
+    storage=$(jq -r '.storage' <<< "$resource_json") || return 1
+    if pf_pve_storage_has_owned_volume "$target_node" "$storage" "$volid" "$vmid"; then
+      if pf_pve_volume_reference_check "$vmid" "$target_node" "$volid"; then
+        PF_PVE_DESTROY_ERROR="Volume $volid became externally referenced during rollback."
+        return 1
+      else
+        check_rc=$?
+        (( check_rc == 1 )) || {
+          PF_PVE_DESTROY_ERROR="Could not recheck references for $volid."
+          return 1
+        }
+      fi
+      PF_PVE_DESTROY_MUTATION_STARTED=true
+      if ! pvesm free "$volid"; then
+        PF_PVE_DESTROY_ERROR="Could not free manifest-owned orphan volume $volid."
+        pf_pve_error "$PF_PVE_DESTROY_ERROR"
+        return 1
+      fi
+      if pf_pve_storage_has_owned_volume "$target_node" "$storage" "$volid" "$vmid"; then
+        PF_PVE_DESTROY_ERROR="Volume $volid remains after pvesm free."
+        return 1
+      else
+        check_rc=$?
+        (( check_rc == 1 )) || return 1
+      fi
+    else
+      check_rc=$?
+      (( check_rc == 1 )) || return 1
+    fi
+  done < <(jq -c '.[] | select(.resource_type == "volume" or .resource_type == "efi")' <<< "$resources_json")
+
+  PF_PVE_DESTROYED_RESOURCES_JSON="$resources_json"
+  pf_core_info "Verified cleanup of ProxForge VM $vmid and its manifest-owned volumes."
+}

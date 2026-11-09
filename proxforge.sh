@@ -24,6 +24,8 @@ Usage:
   ./proxforge.sh operation list
   ./proxforge.sh operation show <operation-uuid>
   ./proxforge.sh operation reconcile <operation-uuid>
+  ./proxforge.sh operation rollback <operation-uuid>
+  ./proxforge.sh operation resume <operation-uuid>
 
 VM creation is performed only by the explicit deploy command. Proxmox
 diagnostic commands remain read-only.
@@ -89,8 +91,16 @@ operation_command() {
       (( $# == 3 )) || return "$PF_EXIT_ARGUMENTS"
       pf_vm_lifecycle_reconcile "$3"
       ;;
+    rollback)
+      (( $# == 3 )) || return "$PF_EXIT_ARGUMENTS"
+      pf_operations_rollback_operation "$3"
+      ;;
+    resume)
+      (( $# == 3 )) || return "$PF_EXIT_ARGUMENTS"
+      pf_operations_resume_operation "$3"
+      ;;
     *)
-      pf_core_error "Usage: ./proxforge.sh operation {list|show <uuid>|reconcile <uuid>}"
+      pf_core_error "Usage: ./proxforge.sh operation {list|show <uuid>|reconcile <uuid>|rollback <uuid>|resume <uuid>}"
       return "$PF_EXIT_ARGUMENTS"
       ;;
   esac

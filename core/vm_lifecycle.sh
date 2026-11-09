@@ -2,6 +2,7 @@
 # ProxForge VM Lifecycle Manager. Sourced by Core; no host work at source time.
 
 PF_VM_OPERATION_ID=""
+PF_VM_PARENT_OPERATION_ID=""
 PF_VM_OPERATION_DIR=""
 PF_VM_MANIFEST_FILE=""
 PF_VM_EVENTS_FILE=""
@@ -94,7 +95,7 @@ pf_vm_lifecycle_event() {
   (( $# >= 6 )) && resource="$6"
   [[ -n "$outcome" ]] || outcome="OBSERVED"
   case "$event" in
-    INITIALIZED|VALIDATED|MODULE_LOADED|IMAGE_RESOLVED|IMAGE_DOWNLOAD_INTENT|IMAGE_DOWNLOADED|IMAGE_VERIFIED|VM_CREATE_INTENT|VM_CREATED|DISK_IMPORT_INTENT|DISK_IMPORTED|VM_CONFIGURED|CLOUD_INIT_CONFIGURED|VM_START_INTENT|VM_STARTED|COMPLETED|FAILED|RECONCILIATION_REQUIRED) ;;
+    INITIALIZED|VALIDATED|MODULE_LOADED|IMAGE_RESOLVED|IMAGE_DOWNLOAD_INTENT|IMAGE_DOWNLOADED|IMAGE_VERIFIED|VM_CREATE_INTENT|VM_CREATED|DISK_IMPORT_INTENT|DISK_IMPORTED|VM_CONFIGURED|CLOUD_INIT_CONFIGURED|VM_START_INTENT|VM_STARTED|COMPLETED|FAILED|RECONCILIATION_REQUIRED|ROLLBACK_INTENT|RESOURCE_REMOVED|ROLLBACK_COMPLETED|ROLLBACK_INCOMPLETE) ;;
     *) pf_vm_lifecycle_error "Unsupported event: $event"; return 1 ;;
   esac
   case "$state" in
@@ -174,33 +175,29 @@ pf_vm_lifecycle_vm_resource() {
 }
 
 pf_vm_lifecycle_abort() {
-  local message="$1" count rollback event details
-  if [[ -n "$PF_VM_MANIFEST_JSON" ]]; then
-    count=$(jq -r '.created_resources|length' <<< "$PF_VM_MANIFEST_JSON" 2>/dev/null || printf '0')
-    if [[ "$PF_VM_MUTATION_STARTED" == "true" || "$count" != "0" ]]; then rollback="BLOCKED"; event="RECONCILIATION_REQUIRED"; else rollback="NOT_REQUIRED"; event="FAILED"; fi
-    pf_vm_lifecycle_set_state FAILED "$rollback" || true
-    details=$(jq -cn --arg message "$message" '{message:$message,automatic_rollback:false}') || details='{}'
-    pf_vm_lifecycle_event "$event" FAILED FAILURE "$message" "$details" || true
+  local message="$1"
+  if declare -F pf_operations_handle_failure >/dev/null 2>&1; then
+    pf_operations_handle_failure "$message"
   else
-    details=$(jq -cn --arg message "$message" '{message:$message}') || details='{}'
-    pf_vm_lifecycle_event FAILED "$PF_VM_CURRENT_STATE" FAILURE "$message" "$details" || true
+    pf_vm_lifecycle_error "$message"
+    pf_vm_lifecycle_unlock
   fi
-  pf_vm_lifecycle_error "$message"
-  pf_vm_lifecycle_unlock
   return 1
 }
 
 pf_vm_lifecycle_make_manifest() {
   local vmid="$1" node="$2" dist="$3" release="$4" profile="$5" digest="$6" storage="$7" rollback="$8"
-  local timestamp json
+  local timestamp json parent
   timestamp=$(pf_vm_lifecycle_now) || return 1
+  parent="$PF_VM_PARENT_OPERATION_ID"
   json=$(jq -cn --arg id "$PF_VM_OPERATION_ID" --arg timestamp "$timestamp" \
     --arg node "$node" --arg dist "$dist" --arg release "$release" --arg profile "$profile" \
-    --arg digest "$digest" --arg storage "$storage" --arg rollback "$rollback" --argjson vmid "$vmid" '
+    --arg digest "$digest" --arg storage "$storage" --arg rollback "$rollback" --arg parent "$parent" --argjson vmid "$vmid" '
       {schema_version:1,operation_id:$id,created_at:$timestamp,updated_at:$timestamp,
        state:"VM_CREATING",vmid:$vmid,node:$node,distribution:$dist,release:$release,
        profile:$profile,image_digest:$digest,storage:$storage,rollback_mode:$rollback,
-       created_resources:[],rollback_status:"NOT_REQUIRED"}
+       created_resources:[],rollback_status:"NOT_REQUIRED"} +
+       (if $parent == "" then {} else {parent_operation_id:$parent} end)
     ') || return 1
   pf_vm_lifecycle_write_manifest "$json"
 }
@@ -210,7 +207,7 @@ pf_vm_lifecycle_deploy() {
   local requested_name="" requested_vmid="auto"
   local details resolved_json descriptor_json release channel lifecycle_status
   local image_path digest trust profile_json vmid vm_name rollback start_vm
-  local vm_resource volume_resource
+  local vm_resource volume_resource efi_resource cloudinit_resource efi_volid efi_storage
 
   (( $# >= 6 )) && requested_name="$6"
   (( $# >= 7 )) && requested_vmid="$7"
@@ -232,8 +229,9 @@ pf_vm_lifecycle_deploy() {
   pf_vm_lifecycle_prepare_state_root || return 1
   pf_vm_lifecycle_generate_id || return 1
   details=$(jq -cn --arg dist "$dist" --arg release "$requested_release" --arg profile "$profile_id" \
-    --arg storage "$storage" --arg bridge "$bridge" --arg name "$requested_name" --arg vmid "$requested_vmid" '
-      {distribution:$dist,requested_release:$release,profile:$profile,storage:$storage,bridge:$bridge,vm_name:$name,requested_vmid:$vmid}
+    --arg storage "$storage" --arg bridge "$bridge" --arg name "$requested_name" --arg vmid "$requested_vmid" --arg parent "$PF_VM_PARENT_OPERATION_ID" '
+      {distribution:$dist,requested_release:$release,profile:$profile,storage:$storage,bridge:$bridge,vm_name:$name,requested_vmid:$vmid} +
+      (if $parent == "" then {} else {resumed_from:$parent} end)
     ') || return 1
   pf_vm_lifecycle_begin "$details" || return 1
   pf_vm_lifecycle_event INITIALIZED INITIALIZING SUCCESS "Operation initialized" "$details" || { pf_vm_lifecycle_unlock; return 1; }
@@ -338,6 +336,13 @@ pf_vm_lifecycle_deploy() {
   fi
   vm_resource=$(pf_vm_lifecycle_vm_resource "$vmid" "$PF_PVE_NODE" true) || { pf_vm_lifecycle_abort "Could not record VM ownership."; return 1; }
   pf_vm_lifecycle_add_resource "$vm_resource" || { pf_vm_lifecycle_abort "VM exists but its resource record could not be persisted."; return 1; }
+  efi_volid=$(jq -r '.efidisk0 // empty | split(",")[0]' <<< "$PF_PVE_CREATED_VM_JSON") || { pf_vm_lifecycle_abort "Could not identify the EFI volume."; return 1; }
+  efi_storage=$(cut -d ':' -f 1 <<< "$efi_volid")
+  [[ -n "$efi_volid" && "$efi_storage" == "$storage" ]] || { pf_vm_lifecycle_abort "EFI volume identity is missing or points to unexpected storage."; return 1; }
+  efi_resource=$(jq -cn --arg volid "$efi_volid" --arg storage "$efi_storage" --arg node "$PF_PVE_NODE" --arg timestamp "$(pf_vm_lifecycle_now)" --argjson vmid "$vmid" '
+    {resource_type:"efi",volid:$volid,storage:$storage,slot:"efidisk0",role:"efi",vmid:$vmid,node:$node,created_at:$timestamp,ownership_verified:true}
+  ') || { pf_vm_lifecycle_abort "Could not create EFI ownership record."; return 1; }
+  pf_vm_lifecycle_add_resource "$efi_resource" || { pf_vm_lifecycle_abort "EFI ownership record could not be persisted."; return 1; }
   pf_vm_lifecycle_set_state DISK_IMPORTING || { pf_vm_lifecycle_abort "Could not persist DISK_IMPORTING state."; return 1; }
   pf_vm_lifecycle_event VM_CREATED DISK_IMPORTING SUCCESS "VM created and verified" "{}" "$(jq -cn --argjson vmid "$vmid" '{resource_type:"vm",vmid:$vmid}')" || { pf_vm_lifecycle_abort "Could not journal VM creation."; return 1; }
   # The VMID is now present in Proxmox and the allocation decision is committed.
@@ -365,6 +370,10 @@ pf_vm_lifecycle_deploy() {
   pf_vm_lifecycle_set_state CLOUD_INIT_CONFIGURING || { pf_vm_lifecycle_abort "Could not persist Cloud-Init state."; return 1; }
   pf_vm_lifecycle_event CLOUD_INIT_CONFIGURED CLOUD_INIT_CONFIGURING INTENT "Configure NoCloud and DHCP" || { pf_vm_lifecycle_abort "Could not journal Cloud-Init intent."; return 1; }
   pf_pve_vm_configure_cloudinit "$vmid" "$storage" || { pf_vm_lifecycle_abort "Cloud-Init configuration failed or is uncertain."; return 1; }
+  cloudinit_resource=$(jq -cn --arg storage "$storage" --arg node "$PF_PVE_NODE" --arg timestamp "$(pf_vm_lifecycle_now)" --argjson vmid "$vmid" '
+    {resource_type:"cloudinit",volid:($storage + ":cloudinit"),storage:$storage,slot:"ide2",role:"cloud-init",vmid:$vmid,node:$node,created_at:$timestamp,ownership_verified:true}
+  ') || { pf_vm_lifecycle_abort "Could not create Cloud-Init ownership record."; return 1; }
+  pf_vm_lifecycle_add_resource "$cloudinit_resource" || { pf_vm_lifecycle_abort "Cloud-Init ownership record could not be persisted."; return 1; }
   pf_vm_lifecycle_event CLOUD_INIT_CONFIGURED CLOUD_INIT_CONFIGURING SUCCESS "Cloud-Init configuration verified" || { pf_vm_lifecycle_abort "Could not journal Cloud-Init result."; return 1; }
 
   start_vm=$(jq -r '.start_vm' <<< "$PF_CORE_CONFIG_JSON") || { pf_vm_lifecycle_abort "Could not read start_vm policy."; return 1; }
@@ -379,8 +388,9 @@ pf_vm_lifecycle_deploy() {
   details=$(jq -cn --argjson vmid "$vmid" --arg name "$vm_name" --argjson started "$start_vm" \
     '{vmid:$vmid,vm_name:$name,started:$started}') || details='{}'
   pf_vm_lifecycle_event COMPLETED COMPLETED SUCCESS "VM lifecycle completed" "$details" || { pf_vm_lifecycle_abort "Could not journal operation completion."; return 1; }
-  jq -cn --arg id "$PF_VM_OPERATION_ID" --arg path "$PF_VM_OPERATION_DIR" --argjson manifest "$PF_VM_MANIFEST_JSON" \
-    '{operation_id:$id,operation_dir:$path,manifest:$manifest}'
+  PF_VM_OPERATION_RESULT_JSON=$(jq -cn --arg id "$PF_VM_OPERATION_ID" --arg path "$PF_VM_OPERATION_DIR" --argjson manifest "$PF_VM_MANIFEST_JSON" \
+    '{operation_id:$id,operation_dir:$path,manifest:$manifest}') || { pf_vm_lifecycle_abort "Could not build operation result."; return 1; }
+  printf '%s\n' "$PF_VM_OPERATION_RESULT_JSON"
   pf_vm_lifecycle_unlock
   pf_core_info "VM lifecycle completed: VMID $vmid, operation $PF_VM_OPERATION_ID."
 }

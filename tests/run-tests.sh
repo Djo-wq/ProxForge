@@ -14,7 +14,8 @@ for test_file in \
   "$ROOT_DIR/tests/test-core.sh" \
   "$ROOT_DIR/tests/test-image-manager.sh" \
   "$ROOT_DIR/tests/test-proxmox-adapter.sh" \
-  "$ROOT_DIR/tests/test-vm-lifecycle.sh"
+  "$ROOT_DIR/tests/test-vm-lifecycle.sh" \
+  "$ROOT_DIR/tests/test-operations-manager.sh"
 do
   printf '\n==> %s\n' "${test_file#"$ROOT_DIR/"}"
   bash "$test_file"
