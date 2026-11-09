@@ -122,8 +122,10 @@ pf_core_validate_module_result() {
           (.url | type == "string" and startswith("https://") and ((capture("^https://(?<authority>[^/?#]+)").authority | contains("@")) | not)) and
           (.format == "openpgp" or .format == "openpgp-clearsigned-checksum") and (.keyring_id | type == "string" and length > 0))) and
         (.verification | type == "object" and (keys - ["method", "trust_level"] | length == 0) and
-          ((.method == "signed-checksum" and .trust_level == "signed" and .signature != null) or
+          ((.method == "signed-checksum" and .trust_level == "signed") or
            (.method == "official-tls-checksum" and .trust_level == "official_tls"))) and
+        (if .verification.method == "signed-checksum" then .signature != null
+         else .signature == null end) and
         (.cloud_init | type == "object" and (keys - ["status", "datasource"] | length == 0) and
           (.status == "verified" or .status == "unverified" or .status == "unsupported") and
           ((has("datasource") | not) or (.datasource | type == "string")))
