@@ -276,7 +276,10 @@ if command -v gpg >/dev/null 2>&1 && command -v gpgv >/dev/null 2>&1; then
   if pf_image_acquire fedora "$descriptor_tampered" >/dev/null 2>&1; then
     fail "Tampered Fedora clearsigned CHECKSUM was accepted"
   fi
-  tampered_checksum_cache=$(find "$CACHE_DIR/fedora/40.6" -type f 2>/dev/null | wc -l)
+  tampered_checksum_cache=0
+  if [[ -d "$CACHE_DIR/fedora/40.6" ]]; then
+    tampered_checksum_cache=$(find "$CACHE_DIR/fedora/40.6" -type f | wc -l)
+  fi
   [[ "$tampered_checksum_cache" == "0" ]] || fail "Image cache was populated after CHECKSUM signature failure"
   unset FAKE_CHECKSUM_SOURCE
   pass "Tampered Fedora clearsigned CHECKSUM is rejected before image download or cache publication"
