@@ -44,7 +44,7 @@ cat "$TMP_ROOT/config.json" > "$CONFIG"
 bash "$ROOT_DIR/scripts/install.sh" --prefix "$PREFIX" >/dev/null || fail "Idempotent staged upgrade failed"
 jq -e '.log_level=="DEBUG"' "$CONFIG" >/dev/null || fail "Upgrade overwrote the administrator configuration"
 [[ -f "$LIB/.proxforge-install-manifest" ]] || fail "Upgrade lost its install manifest"
-cmp -s "$LIB/trust/keyrings/fedora-release.gpg" <(printf 'locally provisioned pinned public key bundle\\n') ||
+cmp -s "$LIB/trust/keyrings/fedora-release.gpg" <(printf 'locally provisioned pinned public key bundle\n') ||
   fail "Upgrade did not preserve the locally provisioned Fedora keyring"
 pass "Repeated installation is idempotent and preserves administrator configuration"
 
@@ -104,7 +104,7 @@ pass "Installer and uninstaller reject unsafe staging paths and symlinked prefix
 
 FOREIGN_PREFIX="$TMP_ROOT/foreign-stage"
 mkdir -p "$FOREIGN_PREFIX/usr/local/lib/proxforge"
-printf 'unrelated user data\\n' > "$FOREIGN_PREFIX/usr/local/lib/proxforge/keep.txt"
+printf 'unrelated user data\n' > "$FOREIGN_PREFIX/usr/local/lib/proxforge/keep.txt"
 if bash "$ROOT_DIR/scripts/install.sh" --prefix "$FOREIGN_PREFIX" >/dev/null 2>&1; then
   fail "Installer replaced an unmanaged application directory"
 fi
