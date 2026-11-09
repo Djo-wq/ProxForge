@@ -316,6 +316,7 @@ pf_pve_vm_create() {
     pf_pve_error "qm create failed for VMID $vmid. The node was not automatically cleaned up; inspect it before retrying."
     return 1
   fi
+  PF_PVE_CREATED_VM_ID="$vmid"
   if ! pf_pve_vm_get_config "$vmid"; then
     pf_pve_error "VM $vmid may have been created, but its configuration could not be verified. Manual reconciliation is required."
     return 1
@@ -499,6 +500,16 @@ pf_pve_vm_attach_imported_disk() {
     pf_pve_error "VM $vmid must be stopped before attaching its system disk."
     return 1
   }
+  if ! jq -e --arg volume "$volume" '
+    ((.scsi0 // "") == "") and
+    any(to_entries[];
+      (.key | test("^unused[0-9]+$")) and
+      (.value | type == "string" and (split(",")[0] == $volume))
+    )
+  ' <<< "$PF_PVE_VM_CONFIG_JSON" >/dev/null; then
+    pf_pve_error "VM $vmid already has scsi0 configured or no longer contains the exact imported volume as an unused disk."
+    return 1
+  fi
   qm set "$vmid" "--$slot" "$volume" || {
     pf_pve_error "Could not attach imported volume $volume to VM $vmid."
     return 1
