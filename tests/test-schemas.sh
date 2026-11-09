@@ -6,6 +6,26 @@ fail() { printf '[FAIL] %s\n' "$*" >&2; exit 1; }
 pass() { printf '[PASS] %s\n' "$*"; }
 command -v jq >/dev/null 2>&1 || fail "jq is required for schema tests"
 
+check_schema() {
+  local file="$1"
+  jq -e '
+    .["$schema"] == "https://json-schema.org/draft/2020-12/schema" and
+    .type == "object" and
+    .additionalProperties == false and
+    (.required | type == "array" and length > 0)
+  ' "$file" >/dev/null || fail "invalid schema document: $file"
+  pass "schema JSON parses: $(basename -- "$file")"
+}
+
+assert_required_fields() {
+  local file="$1"
+  shift
+  jq -e --args "$@" '
+    .required as $required |
+    all($ARGS.positional[]; . as $field | ($required | index($field)) != null)
+  ' "$file" >/dev/null || fail "required fields missing in $(basename -- "$file")"
+}
+
 for schema in \
   "$ROOT_DIR/schemas/module.schema.json" \
   "$ROOT_DIR/schemas/profile.schema.json" \
@@ -13,10 +33,25 @@ for schema in \
   "$ROOT_DIR/schemas/operation.schema.json" \
   "$ROOT_DIR/schemas/operation-event.schema.json"
 do
-  jq -e '.["$schema"] == "https://json-schema.org/draft/2020-12/schema" and .type == "object" and (.additionalProperties == false)' "$schema" >/dev/null \
-    || fail "invalid schema document: $schema"
-  pass "schema JSON parses: $(basename -- "$schema")"
+  check_schema "$schema"
 done
+
+assert_required_fields "$ROOT_DIR/schemas/module.schema.json" api_version id name family version architectures
+assert_required_fields "$ROOT_DIR/schemas/profile.schema.json" schema_version id name cpu_cores memory_mb disk_gb machine firmware scsi_controller network_model agent_enabled secure_boot
+assert_required_fields "$ROOT_DIR/schemas/image-metadata.schema.json" schema_version distribution release architecture source_url filename disk_format file_size checksum_algorithm checksum_value verification_method verification_result trust_level verification_date publication_identifier cached_at
+assert_required_fields "$ROOT_DIR/schemas/operation.schema.json" schema_version operation_id state vmid node distribution release profile image_digest storage rollback_mode created_resources rollback_status
+assert_required_fields "$ROOT_DIR/schemas/operation-event.schema.json" schema_version operation_id sequence timestamp event state
+pass "required fields are present in all five schema contracts"
+
+jq -e '.properties.api_version.const == "1" and .properties.architectures.items.enum == ["x86_64"]' "$ROOT_DIR/schemas/module.schema.json" >/dev/null \
+  || fail "module API version or architecture contract mismatch"
+jq -e '.properties.machine.const == "q35" and .properties.firmware.const == "ovmf" and .properties.secure_boot.type == "boolean"' "$ROOT_DIR/schemas/profile.schema.json" >/dev/null \
+  || fail "profile hardware contract mismatch"
+jq -e '.properties.verification_result.const == true and (.properties.verification_method.enum | index("signed-checksum") != null) and (.properties.verification_method.enum | index("official-tls-checksum") != null)' "$ROOT_DIR/schemas/image-metadata.schema.json" >/dev/null \
+  || fail "image verification policy contract mismatch"
+jq -e '(.properties.rollback_mode.enum == ["auto","keep"]) and (.properties.created_resources.items.properties.ownership_verified.type == "boolean")' "$ROOT_DIR/schemas/operation.schema.json" >/dev/null \
+  || fail "operation rollback or resource ownership contract mismatch"
+pass "critical schema invariants are present"
 
 for profile in minimal standard server heavy; do
   file="$ROOT_DIR/profiles/$profile.json"
