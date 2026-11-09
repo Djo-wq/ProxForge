@@ -7,7 +7,7 @@
   "required": [
     "schema_version", "operation_id", "created_at", "updated_at",
     "state", "vmid", "node", "distribution", "release", "profile",
-    "image_digest", "storage", "created_resources", "rollback_status"
+    "image_digest", "storage", "rollback_mode", "created_resources", "rollback_status"
   ],
   "properties": {
     "schema_version": {"type": "integer", "const": 1},
