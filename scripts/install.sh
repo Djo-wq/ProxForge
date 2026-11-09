@@ -193,15 +193,20 @@ for item in proxforge.sh src scripts docs; do
   cp -a -- "$ROOT_DIR/$item" "$STAGE/"
 done
 
-# Keep locally provisioned key material across upgrades; never replace it with
-# repository contents and never follow links while copying this trust directory.
-if [[ -d "$LIB_DIR/src/trust/keyrings" && ! -L "$LIB_DIR/src/trust/keyrings" ]]; then
-  if find "$LIB_DIR/src/trust/keyrings" -type l -print -quit | grep -q .; then
-    fail "existing Fedora keyring directory contains symbolic links."
+# Preserve locally provisioned Fedora trust material across upgrades.
+# The second source path supports upgrades from releases where trust/ lived at
+# the installation root; new installations keep it under src/trust/.
+for keyring_source in "$LIB_DIR/src/trust/keyrings" "$LIB_DIR/trust/keyrings"; do
+  if [[ -e "$keyring_source" || -L "$keyring_source" ]]; then
+    [[ -d "$keyring_source" && ! -L "$keyring_source" ]] ||
+      fail "existing Fedora keyring path is not a managed directory: $keyring_source"
+    if find "$keyring_source" -type l -print -quit | grep -q .; then
+      fail "existing Fedora keyring directory contains symbolic links."
+    fi
+    mkdir -p -- "$STAGE/src/trust/keyrings"
+    cp -an -- "$keyring_source/." "$STAGE/src/trust/keyrings/"
   fi
-  mkdir -p -- "$STAGE/src/trust/keyrings"
-  cp -a -- "$LIB_DIR/src/trust/keyrings/." "$STAGE/src/trust/keyrings/"
-fi
+done
 
 printf '%s\n' 'proxforge-managed-install-v1' > "$STAGE/.proxforge-install-manifest"
 find "$STAGE" -type d -exec chmod 0755 {} +
