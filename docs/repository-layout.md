@@ -6,56 +6,66 @@
 proxmox-scripts/
 ├── .github/
 │   ├── pull_request_template.md
-│   └── workflows/
-│       └── tests.yml
-├── config/
-│   └── defaults.json
-├── core/
-│   ├── bootstrap.sh
-│   ├── common.sh
-│   ├── config.sh
-│   ├── errors.sh
-│   ├── image_manager.sh
-│   ├── module_loader.sh
-│   ├── operations_manager.sh
-│   ├── profiles.sh
-│   ├── proxmox_adapter.sh
-│   ├── validation.sh
-│   └── vm_lifecycle.sh
-├── distributions/
-│   ├── debian/
-│   └── fedora/
+│   └── workflows/tests.yml
+├── config/                 # Configuration par défaut
+├── core/                   # Moteur modulaire Bash
+├── distributions/          # Modules Fedora et Debian
 ├── docs/
-│   ├── phases/
+│   ├── phases/             # Historique des phases 1 à 9
 │   ├── architecture.md
-│   ├── testing.md
-│   └── phase-10-installation.md / phase-11-final-audit.md
-├── profiles/
-├── schemas/
-├── scripts/
-├── tests/
-├── trust/
-├── proxforge.sh
+│   ├── legacy-scripts.md
+│   ├── phase-10-installation.md
+│   ├── phase-11-final-audit.md
+│   ├── repository-layout.md
+│   └── testing.md
+├── linux/                  # Anciens scripts autonomes (compatibilité)
+├── windows/                # Anciens scripts autonomes (compatibilité)
+├── lxc/                    # Anciens scripts autonomes (compatibilité)
+├── network/                # Anciens scripts autonomes (compatibilité)
+├── Docker-vm/              # Anciens scripts autonomes (compatibilité)
+├── profiles/               # Profils VM JSON
+├── schemas/                # Schémas JSON
+├── scripts/                # Install / uninstall / trust provisioning
+├── tests/                  # Tests, fixtures et runner
+├── trust/                  # Registre d'empreintes
+├── proxforge.sh            # Entrée CLI
+├── Makefile                # Cibles help / test / lint / check
 ├── CONTRIBUTING.md
+├── .editorconfig
+├── .gitignore
 ├── LICENSE
 └── README.md
 ```
 
-## Répertoires conservés pour compatibilité
+## Deux ensembles de scripts distincts
 
-Les dossiers `linux/`, `windows/`, `lxc/`, `network/` et
-`Docker-vm/` contiennent les anciens scripts autonomes. Ils restent à leur
-emplacement actuel afin de ne pas casser les chemins utilisés par les personnes
-qui les ont déjà clonés ou documentés. Ils sont distincts de la CLI modulaire.
+### CLI modulaire (chemin recommandé)
+
+Les répertoires `core/`, `distributions/`, `profiles/`, `config/`,
+`schemas/`, `trust/` et le fichier `proxforge.sh` forment le moteur courant.
+L'installateur `scripts/install.sh` copie explicitement ces chemins dans la
+structure système. Leurs emplacements sont donc des interfaces runtime stables.
+
+### Anciens scripts autonomes
+
+Les répertoires `linux/`, `windows/`, `lxc/`, `network/` et
+`Docker-vm/` sont conservés à leurs chemins historiques pour ne pas casser
+les commandes déjà utilisées ou les liens vers des fichiers. Ils ne sont pas
+des modules de la CLI et ne bénéficient pas automatiquement de ses politiques,
+de son journal d'opérations ou de sa couverture de tests.
+
+La note [Anciens scripts autonomes](legacy-scripts.md) précise cette séparation.
+Les nouveaux développements doivent viser la CLI modulaire, sauf demande
+explicite de maintenance de ces scripts.
 
 ## Pourquoi les composants runtime restent à la racine
 
 L'installateur `scripts/install.sh` copie explicitement les dossiers runtime
-et le point d'entrée depuis la racine du dépôt. Plusieurs scripts et tests
-résolvent également leur racine à partir de `BASH_SOURCE`. Déplacer
-`core/`, `distributions/`, `profiles/`, `config/`, `schemas/` ou
-`trust/` sans modifier ces contrats casserait l'installation et les tests.
+et le point d'entrée depuis la racine du dépôt. Plusieurs composants résolvent
+également leurs chemins à partir de `BASH_SOURCE`. Déplacer les dossiers
+runtime sans mettre à jour simultanément ces références, l'installateur et les
+tests casserait l'installation.
 
-La règle est donc : organiser la documentation et les métadonnées librement,
-mais traiter les chemins runtime comme une interface stable. Tout déplacement
-de code doit inclure la mise à jour des chemins, des tests et du paquet installé.
+La documentation et les outils de développement peuvent être regroupés librement.
+Les chemins runtime doivent en revanche être traités comme une interface
+stable et déplacés uniquement dans une migration dédiée avec tests de compatibilité.
