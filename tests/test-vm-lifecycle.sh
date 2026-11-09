@@ -251,7 +251,7 @@ jq -e --arg parent "$PARENT_OPERATION_ID" '
   .state=="COMPLETED" and .parent_operation_id==$parent and
   .vmid==304 and (.created_resources|length)==4
 ' "$RESUMED_MANIFEST" >/dev/null || fail "Resumed deployment did not preserve its parent link or completed state"
-jq -e --arg parent "$PARENT_OPERATION_ID" '.request.resumed_from==$parent' "$STATE_ROOT/$RESUMED_OPERATION_ID/request.json" >/dev/null || fail "Resumed request did not retain its parent operation ID"
+jq -e --arg parent "$PARENT_OPERATION_ID" '.resumed_from==$parent' "$STATE_ROOT/$RESUMED_OPERATION_ID/request.json" >/dev/null || fail "Resumed request did not retain its parent operation ID"
 [[ "$PF_FAKE_START_COUNT" == "1" ]] || fail "Resume ignored start_vm=false and started another VM"
 pass "Interrupted pre-mutation operation resumes as a new linked operation with a fresh journal"
 
