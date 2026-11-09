@@ -13,6 +13,7 @@ on:
       - phase-9/**
       - phase-10/**
       - phase-11/**
+      - chore/**
   pull_request:
     branches:
       - main
@@ -30,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes jq shellcheck
-      - name: Run ShellCheck on Phase 11 entry points
-        run: shellcheck --severity=error proxforge.sh scripts/install.sh scripts/uninstall.sh tests/test-install.sh
-      - name: Run hermetic test suite
-        run: bash tests/run-tests.sh
+      - name: Validate Makefile syntax target
+        run: make syntax
+      - name: Run ShellCheck and the full hermetic test suite
+        run: make check
