@@ -331,7 +331,7 @@ pf_vm_lifecycle_deploy() {
   vm_resource=$(pf_vm_lifecycle_vm_resource "$vmid" "$PF_PVE_NODE" true) || { pf_vm_lifecycle_abort "Could not record VM ownership."; return 1; }
   pf_vm_lifecycle_add_resource "$vm_resource" || { pf_vm_lifecycle_abort "VM exists but its resource record could not be persisted."; return 1; }
   pf_vm_lifecycle_set_state DISK_IMPORTING || { pf_vm_lifecycle_abort "Could not persist DISK_IMPORTING state."; return 1; }
-  pf_vm_lifecycle_event VM_CREATED DISK_IMPORTING SUCCESS "VM created and verified" "{}" "$vm_resource" || { pf_vm_lifecycle_abort "Could not journal VM creation."; return 1; }
+  pf_vm_lifecycle_event VM_CREATED DISK_IMPORTING SUCCESS "VM created and verified" "{}" "$(jq -cn --argjson vmid "$vmid" '{resource_type:"vm",vmid:$vmid}')" || { pf_vm_lifecycle_abort "Could not journal VM creation."; return 1; }
 
   pf_vm_lifecycle_event DISK_IMPORT_INTENT DISK_IMPORTING INTENT "Import verified system disk" || { pf_vm_lifecycle_abort "Could not journal disk import intent."; return 1; }
   pf_pve_vm_import_disk "$vmid" "$image_path" "$storage" || {
@@ -343,11 +343,11 @@ pf_vm_lifecycle_deploy() {
   ') || { pf_vm_lifecycle_abort "Imported volume identity could not be recorded."; return 1; }
   pf_vm_lifecycle_add_resource "$volume_resource" || { pf_vm_lifecycle_abort "Imported volume ownership record could not be persisted."; return 1; }
   pf_vm_lifecycle_set_state VM_CONFIGURING || { pf_vm_lifecycle_abort "Could not persist VM_CONFIGURING state."; return 1; }
-  pf_vm_lifecycle_event DISK_IMPORTED VM_CONFIGURING SUCCESS "System disk imported and identified" "{}" "$volume_resource" || { pf_vm_lifecycle_abort "Could not journal disk import."; return 1; }
+  pf_vm_lifecycle_event DISK_IMPORTED VM_CONFIGURING SUCCESS "System disk imported and identified" "{}" "$(jq -cn --argjson vmid "$vmid" --arg volid "$PF_PVE_IMPORTED_VOLUME" --arg storage "$storage" '{resource_type:"volume",vmid:$vmid,volid:$volid,storage:$storage}')" || { pf_vm_lifecycle_abort "Could not journal disk import."; return 1; }
 
   pf_vm_lifecycle_event VM_CONFIGURED VM_CONFIGURING INTENT "Attach imported system disk to scsi0" || { pf_vm_lifecycle_abort "Could not journal disk attachment intent."; return 1; }
   pf_pve_vm_attach_imported_disk "$vmid" scsi0 "$PF_PVE_IMPORTED_VOLUME" || { pf_vm_lifecycle_abort "System disk attachment failed or is uncertain."; return 1; }
-  pf_vm_lifecycle_event VM_CONFIGURED VM_CONFIGURING SUCCESS "System disk attached and verified" "{}" "$volume_resource" || { pf_vm_lifecycle_abort "Could not journal disk attachment."; return 1; }
+  pf_vm_lifecycle_event VM_CONFIGURED VM_CONFIGURING SUCCESS "System disk attached and verified" "{}" "$(jq -cn --argjson vmid "$vmid" --arg volid "$PF_PVE_IMPORTED_VOLUME" --arg storage "$storage" '{resource_type:"volume",vmid:$vmid,volid:$volid,storage:$storage}')" || { pf_vm_lifecycle_abort "Could not journal disk attachment."; return 1; }
 
   pf_vm_lifecycle_set_state CLOUD_INIT_CONFIGURING || { pf_vm_lifecycle_abort "Could not persist Cloud-Init state."; return 1; }
   pf_vm_lifecycle_event CLOUD_INIT_CONFIGURED CLOUD_INIT_CONFIGURING INTENT "Configure NoCloud and DHCP" || { pf_vm_lifecycle_abort "Could not journal Cloud-Init intent."; return 1; }
