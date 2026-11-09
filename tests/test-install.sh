@@ -22,7 +22,16 @@ CONFIG="$PREFIX/etc/proxforge/config.json"
 [[ "$(stat -c '%a' "$CONFIG")" == "640" ]] || fail "Configuration mode is not 0640"
 [[ "$(stat -c '%a' "$PREFIX/var/lib/proxforge/tmp")" == "700" ]] || fail "Temporary directory mode is not 0700"
 [[ "$(stat -c '%a' "$PREFIX/var/lib/proxforge/state")" == "700" ]] || fail "State directory mode is not 0700"
-"$LIB/proxforge.sh" --version >/dev/null || fail "Installed CLI could not start"
+"$LIB/proxforge.sh" --version >/dev/null || fail "Installed CLI could not start directly"
+"$PREFIX/usr/local/bin/proxforge" --version >/dev/null ||
+  fail "Installed CLI could not start through the primary /usr/local/bin symlink"
+"$PREFIX/usr/local/bin/proxforge.sh" --version >/dev/null ||
+  fail "Backward-compatible CLI symlink could not start"
+"$PREFIX/usr/local/bin/proxforge" completion bash > "$TMP_ROOT/installed-completion.sh" ||
+  fail "Installed CLI could not generate Bash completion"
+grep -q 'complete -F _proxforge_complete proxforge.sh' "$TMP_ROOT/installed-completion.sh" ||
+  fail "Installed CLI completion output is incomplete"
+
 pass "Staged install creates secure FHS paths, configuration and relocatable CLI links"
 
 jq '.log_level="DEBUG"' "$CONFIG" > "$TMP_ROOT/config.json"
