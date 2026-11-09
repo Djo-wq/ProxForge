@@ -241,6 +241,7 @@ jq -cn --arg id "$PARENT_OPERATION_ID" --arg timestamp "$IMAGE_TIME" '{
   event:"FAILED",state:"FAILED",outcome:"FAILURE"
 }' >> "$PARENT_DIR/events.jsonl"
 
+reset_module
 PF_VM_OPERATION_ID=""
 PF_VM_PARENT_OPERATION_ID=""
 pf_operations_resume_operation "$PARENT_OPERATION_ID" > "$TMP_ROOT/resume.json" || fail "Pre-mutation operation resume failed"
