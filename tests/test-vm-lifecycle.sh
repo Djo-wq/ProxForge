@@ -223,6 +223,54 @@ jq -e '.state=="COMPLETED" and .vmid==303 and (.created_resources|length)==4' "$
 [[ "$PF_FAKE_START_COUNT" == "1" ]] || fail "start_vm=false still started a VM"
 pass "start_vm=false leaves the VM stopped while completing disk and Cloud-Init configuration"
 
+# Controlled resume is allowed only before any VM mutation intent has been journaled.
+PARENT_OPERATION_ID="55555555-5555-4555-8555-555555555555"
+PARENT_DIR="$STATE_ROOT/$PARENT_OPERATION_ID"
+mkdir -m 0750 "$PARENT_DIR"
+: > "$PARENT_DIR/.lock"
+jq -n '{
+  distribution:"valid",requested_release:"latest",profile:"standard",
+  storage:"local-lvm",bridge:"vmbr0",vm_name:"",requested_vmid:"auto"
+}' > "$PARENT_DIR/request.json"
+jq -cn --arg id "$PARENT_OPERATION_ID" --arg timestamp "$IMAGE_TIME" '{
+  schema_version:1,operation_id:$id,sequence:1,timestamp:$timestamp,
+  event:"INITIALIZED",state:"INITIALIZING",outcome:"SUCCESS"
+}' > "$PARENT_DIR/events.jsonl"
+jq -cn --arg id "$PARENT_OPERATION_ID" --arg timestamp "$IMAGE_TIME" '{
+  schema_version:1,operation_id:$id,sequence:2,timestamp:$timestamp,
+  event:"FAILED",state:"FAILED",outcome:"FAILURE"
+}' >> "$PARENT_DIR/events.jsonl"
+
+PF_VM_OPERATION_ID=""
+PF_VM_PARENT_OPERATION_ID=""
+pf_operations_resume_operation "$PARENT_OPERATION_ID" > "$TMP_ROOT/resume.json" || fail "Pre-mutation operation resume failed"
+RESUMED_OPERATION_ID=$(jq -r '.new_operation.operation_id' "$TMP_ROOT/resume.json")
+RESUMED_MANIFEST="$STATE_ROOT/$RESUMED_OPERATION_ID/operation.json"
+jq -e --arg parent "$PARENT_OPERATION_ID" '
+  .state=="COMPLETED" and .parent_operation_id==$parent and
+  .vmid==304 and (.created_resources|length)==4
+' "$RESUMED_MANIFEST" >/dev/null || fail "Resumed deployment did not preserve its parent link or completed state"
+jq -e --arg parent "$PARENT_OPERATION_ID" '.request.resumed_from==$parent' "$STATE_ROOT/$RESUMED_OPERATION_ID/request.json" >/dev/null || fail "Resumed request did not retain its parent operation ID"
+[[ "$PF_FAKE_START_COUNT" == "1" ]] || fail "Resume ignored start_vm=false and started another VM"
+pass "Interrupted pre-mutation operation resumes as a new linked operation with a fresh journal"
+
+# Any VM-create intent is a hard boundary, even if no resource is yet recorded.
+MUTATED_OPERATION_ID="66666666-6666-4666-8666-666666666666"
+MUTATED_DIR="$STATE_ROOT/$MUTATED_OPERATION_ID"
+mkdir -m 0750 "$MUTATED_DIR"
+: > "$MUTATED_DIR/.lock"
+cp "$PARENT_DIR/request.json" "$MUTATED_DIR/request.json"
+jq -cn --arg id "$MUTATED_OPERATION_ID" --arg timestamp "$IMAGE_TIME" '{
+  schema_version:1,operation_id:$id,sequence:1,timestamp:$timestamp,
+  event:"VM_CREATE_INTENT",state:"VM_CREATING",outcome:"INTENT"
+}' > "$MUTATED_DIR/events.jsonl"
+NEXT_VMID_BEFORE_RESUME="$PF_FAKE_NEXT_VMID"
+if pf_operations_resume_operation "$MUTATED_OPERATION_ID" >/dev/null 2>&1; then
+  fail "Operation with a VM_CREATE_INTENT event was replayed"
+fi
+[[ "$PF_FAKE_NEXT_VMID" == "$NEXT_VMID_BEFORE_RESUME" ]] || fail "Rejected resume allocated a VMID"
+pass "Any journaled VM-create intent blocks automatic replay before Proxmox is touched"
+
 if pf_vm_lifecycle_operation_show "not-a-uuid" >/dev/null 2>&1; then fail "Invalid operation ID was accepted"; fi
 pass "Invalid operation identifiers are rejected"
 
