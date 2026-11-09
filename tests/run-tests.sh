@@ -3,7 +3,7 @@ set -Eeuo pipefail
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 
 bash -n "$ROOT_DIR/proxforge.sh"
-for shell_file in "$ROOT_DIR"/core/*.sh "$ROOT_DIR"/tests/*.sh "$ROOT_DIR"/tests/fixtures/modules/*/module.sh; do
+for shell_file in "$ROOT_DIR"/core/*.sh "$ROOT_DIR"/tests/*.sh "$ROOT_DIR"/tests/fixtures/modules/*/module.sh "$ROOT_DIR"/distributions/*/module.sh "$ROOT_DIR"/scripts/*.sh; do
   [[ -f "$shell_file" ]] || continue
   bash -n "$shell_file"
 done
@@ -11,6 +11,7 @@ done
 for test_file in \
   "$ROOT_DIR/tests/test-schemas.sh" \
   "$ROOT_DIR/tests/test-module-contract.sh" \
+  "$ROOT_DIR/tests/test-fedora-module.sh" \
   "$ROOT_DIR/tests/test-core.sh" \
   "$ROOT_DIR/tests/test-image-manager.sh" \
   "$ROOT_DIR/tests/test-proxmox-adapter.sh" \
