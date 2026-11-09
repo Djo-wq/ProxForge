@@ -50,7 +50,7 @@ done
 if [[ -n "$PREFIX" ]]; then
   [[ "$PREFIX" == /* && "$PREFIX" != "/" ]] || fail "--prefix must be an absolute path other than /."
   [[ "$PREFIX" != *"/../"* && "$PREFIX" != */.. ]] || fail "--prefix must not contain parent-directory traversal."
-  [[ ! -L "$PREFIX" ]] || fail "--prefix must not be a symbolic link."
+  reject_symlink_prefix_components "$PREFIX"
   mkdir -p -- "$PREFIX"
   PREFIX=$(cd -- "$PREFIX" && pwd -P)
   STAGING_MODE=true
