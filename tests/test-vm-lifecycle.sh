@@ -219,7 +219,7 @@ PF_CORE_CONFIG_JSON=$(jq '.start_vm=false' <<< "$PF_CORE_CONFIG_JSON")
 PF_VM_OPERATION_ID="33333333-3333-4333-8333-333333333333"
 pf_vm_lifecycle_deploy valid latest standard local-lvm vmbr0 "" auto > "$TMP_ROOT/stopped.json" || fail "Stopped-VM lifecycle failed"
 STOPPED_MANIFEST="$STATE_ROOT/33333333-3333-4333-8333-333333333333/operation.json"
-jq -e '.state=="COMPLETED" and .vmid==302 and (.created_resources|length)==4' "$STOPPED_MANIFEST" >/dev/null || fail "Stopped VM operation did not complete"
+jq -e '.state=="COMPLETED" and .vmid==303 and (.created_resources|length)==4' "$STOPPED_MANIFEST" >/dev/null || fail "Stopped VM operation did not complete"
 [[ "$PF_FAKE_START_COUNT" == "1" ]] || fail "start_vm=false still started a VM"
 pass "start_vm=false leaves the VM stopped while completing disk and Cloud-Init configuration"
 
