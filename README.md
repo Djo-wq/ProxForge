@@ -203,3 +203,23 @@ CPU_CORES=8 RAM_SIZE=16384 DISK_SIZE=100G STORAGE=local-zfs bash linux/create-ub
 ## Licence
 
 Ce projet est distribué sous licence **MIT**. Vous êtes libre de l'utiliser, de le modifier et de le redistribuer, à des fins personnelles comme commerciales.
+
+## ProxForge CLI (phases 1–9)
+
+The current modular ProxForge engine is operated through `proxforge.sh`:
+
+```bash
+./proxforge.sh --help
+./proxforge.sh doctor
+./proxforge.sh module list
+./proxforge.sh module validate fedora
+./proxforge.sh module image debian latest
+./proxforge.sh profile list
+./proxforge.sh pve doctor
+./proxforge.sh deploy fedora stable standard local-lvm vmbr0 --name fedora-lab --vmid auto
+./proxforge.sh operation list
+```
+
+Use `--config FILE` before the command to select an explicit JSON configuration override. The CLI includes read-only module, profile, Proxmox and image-cache inspection; VM creation remains explicit through `deploy`. Debian's official-TLS checksum trust mode stays disabled by default.
+
+See [Phase 9 CLI documentation](docs/phase-9-complete-cli.md) for the command reference and [Phase 8 Debian module notes](docs/phase-8-debian-module.md) for Debian's image trust policy.
