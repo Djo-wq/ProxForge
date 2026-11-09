@@ -893,9 +893,10 @@ pf_image_cache_list() {
           .architecture == $architecture and .file_size == $size and
           (.disk_format == "qcow2" or .disk_format == "raw") and
           (.checksum_algorithm == "sha256" or .checksum_algorithm == "sha512") and
-          (.checksum_value | type == "string" and
-            ((.checksum_algorithm == "sha256" and test("^[a-f0-9]{64}$")) or
-             (.checksum_algorithm == "sha512" and test("^[a-f0-9]{128}$")))) and
+          ((.checksum_algorithm == "sha256" and
+             (.checksum_value | type == "string" and test("^[a-f0-9]{64}$"))) or
+           (.checksum_algorithm == "sha512" and
+             (.checksum_value | type == "string" and test("^[a-f0-9]{128}$")))) and
           .verification_result == true and
           (.trust_level == "signed" or .trust_level == "official_tls")
         ' <<< "$metadata_json" >/dev/null; then
