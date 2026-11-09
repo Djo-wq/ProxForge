@@ -145,6 +145,41 @@ pf_image_check_cache_path_components() {
   done
 }
 
+pf_image_check_cache_path_components() {
+  local component current="" uid mode
+  local -a components=()
+  [[ "$PF_IMAGE_CACHE_DIR" == /* && "$PF_IMAGE_CACHE_DIR" != *//* ]] || return 1
+  [[ "$PF_IMAGE_CACHE_DIR" != *"/../"* && "$PF_IMAGE_CACHE_DIR" != *"/./"* &&
+     "$PF_IMAGE_CACHE_DIR" != */.. && "$PF_IMAGE_CACHE_DIR" != */. ]] || return 1
+  IFS='/' read -r -a components <<< "${PF_IMAGE_CACHE_DIR#/}"
+  for component in "${components[@]}"; do
+    [[ -n "$component" ]] || continue
+    current="${current}/${component}"
+    [[ ! -L "$current" ]] || {
+      pf_image_error "Cache path contains a symbolic link: $current"
+      return 1
+    }
+    [[ ! -e "$current" || -d "$current" ]] || {
+      pf_image_error "Cache path component is not a directory: $current"
+      return 1
+    }
+    if [[ -d "$current" && ! ("${PF_IMAGE_TEST_MODE:-0}" == "1" && "$EUID" != "0") ]]; then
+      uid=$(stat -c '%u' "$current") || return 1
+      [[ "$uid" == "0" ]] || {
+        pf_image_error "Cache path parent must be root-owned: $current"
+        return 1
+      }
+      mode=$(stat -c '%a' "$current") || return 1
+      if (( (8#$mode & 0022) != 0 )); then
+        (( (8#$mode & 01000) != 0 && uid == 0 )) || {
+          pf_image_error "Cache path parent is group/world writable: $current"
+          return 1
+        }
+      fi
+    fi
+  done
+}
+
 pf_image_check_secure_path() {
   local path="$1" expected_type="$2" uid mode
   if [[ "$expected_type" == "directory" ]]; then
