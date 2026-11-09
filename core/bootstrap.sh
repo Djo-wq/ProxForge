@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-
 PF_CORE_ROOT="${PF_CORE_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)}"
-
 pf_core_init() {
   local bash_major bash_minor component
-  local -a components=(common.sh errors.sh validation.sh config.sh module_loader.sh profiles.sh)
+  local -a components=(common.sh errors.sh validation.sh config.sh module_loader.sh profiles.sh image_manager.sh)
   bash_major="${BASH_VERSINFO[0]:-0}"
   bash_minor="${BASH_VERSINFO[1]:-0}"
   if (( bash_major < 5 || (bash_major == 5 && bash_minor < 1) )); then

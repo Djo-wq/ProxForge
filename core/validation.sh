@@ -5,14 +5,18 @@ pf_core_validate_config_json() {
   jq -e '
     type == "object" and
     (keys - ["schema_version", "default_profile", "rollback_mode", "start_vm",
-             "allow_official_tls_checksum", "image_cache_dir", "tmp_dir",
+             "allow_official_tls_checksum", "image_cache_dir", "image_max_bytes",
+             "image_download_timeout_seconds", "image_lock_timeout_seconds", "tmp_dir",
              "state_dir", "log_dir", "log_level"] | length == 0) and
     .schema_version == 1 and
     (.default_profile | type == "string" and test("^[a-z][a-z0-9-]{1,31}$")) and
     (.rollback_mode == "auto" or .rollback_mode == "keep") and
     (.start_vm | type == "boolean") and
     (.allow_official_tls_checksum | type == "boolean") and
-    (.image_cache_dir | type == "string" and startswith("/")) and
+    (.image_cache_dir | type == "string" and startswith("/") and length > 1) and
+    (.image_max_bytes | type == "number" and floor == . and . >= 1048576 and . <= 1099511627776) and
+    (.image_download_timeout_seconds | type == "number" and floor == . and . >= 60 and . <= 86400) and
+    (.image_lock_timeout_seconds | type == "number" and floor == . and . >= 1 and . <= 86400) and
     (.tmp_dir | type == "string" and startswith("/")) and
     (.state_dir | type == "string" and startswith("/")) and
     (.log_dir | type == "string" and startswith("/")) and
