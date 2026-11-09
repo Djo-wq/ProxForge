@@ -340,6 +340,11 @@ pf_vm_lifecycle_deploy() {
   pf_vm_lifecycle_add_resource "$vm_resource" || { pf_vm_lifecycle_abort "VM exists but its resource record could not be persisted."; return 1; }
   pf_vm_lifecycle_set_state DISK_IMPORTING || { pf_vm_lifecycle_abort "Could not persist DISK_IMPORTING state."; return 1; }
   pf_vm_lifecycle_event VM_CREATED DISK_IMPORTING SUCCESS "VM created and verified" "{}" "$(jq -cn --argjson vmid "$vmid" '{resource_type:"vm",vmid:$vmid}')" || { pf_vm_lifecycle_abort "Could not journal VM creation."; return 1; }
+  # The VMID is now present in Proxmox and the allocation decision is committed.
+  # Release the global lock before the potentially long disk import and configuration steps.
+  flock -u 9 || true
+  exec 9>&-
+  PF_VM_VMID_LOCKED=false
 
   pf_vm_lifecycle_event DISK_IMPORT_INTENT DISK_IMPORTING INTENT "Import verified system disk" || { pf_vm_lifecycle_abort "Could not journal disk import intent."; return 1; }
   pf_pve_vm_import_disk "$vmid" "$image_path" "$storage" || {
