@@ -1,154 +1,272 @@
-# ProxForge
+<div align="center">
 
-**CLI Bash modulaire pour préparer et gérer des machines virtuelles Linux sur Proxmox VE.**
+```text
+██████╗ ██████╗  ██████╗ ██╗  ██╗███████╗ ██████╗ ██████╗  ██████╗ ███████╗
+██╔══██╗██╔══██╗██╔═══██╗╚██╗██╔╝██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝
+███████║██████╔╝██║   ██║ ╚███╔╝ █████╗  ██║   ██║██████╔╝██║  ███╗█████╗  
+██║     ██╔══██║██║   ██║ ██╔██╗ ██╔══╝  ██║   ██║██╔══██║██║   ██║██╔══╝  
+██║     ██║  ██║╚██████╔╝██╔╝ ██╗██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗
+╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+```
 
-ProxForge regroupe un moteur modulaire, des modules de distributions, un gestionnaire d'images, un adaptateur Proxmox et un journal d'opérations. Les scripts historiques autonomes sont conservés séparément dans `legacy/`.
+**⚡ Créez et gérez des machines virtuelles Linux sur Proxmox VE avec des commandes Bash simples.**
 
-## État du projet
+![Bash](https://img.shields.io/badge/langage-Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
+![Proxmox VE](https://img.shields.io/badge/Proxmox_VE-9.x-E57000?style=for-the-badge&logo=proxmox&logoColor=white)
+![Modules](https://img.shields.io/badge/modules-Fedora%20%7C%20Debian-3776AB?style=for-the-badge)
+![Licence](https://img.shields.io/badge/licence-MIT-212121?style=for-the-badge)
 
-- CLI et Core modulaires : phases 1 à 11 intégrées dans `main`.
-- Modules actuellement présents : Fedora et Debian.
-- Cible : Proxmox VE 9.2 ou plus récent, sur Debian 13.
-- Tests automatisés : suite hermétique, contrôle syntaxique Bash et ShellCheck via GitHub Actions.
-- Validation sur un véritable nœud Proxmox : à effectuer séparément avant toute utilisation en production.
+</div>
 
-## Démarrage rapide
+---
 
-### Cloner le dépôt
+## 📚 Sommaire
+
+- [📌 À propos](#à-propos)
+- [✨ Fonctionnalités](#fonctionnalités)
+- [📋 Prérequis](#prérequis)
+- [🗂️ Structure du projet](#structure-du-projet)
+- [🚀 Installation](#installation)
+- [🖥️ Utilisation](#utilisation)
+- [🔧 Personnalisation](#personnalisation)
+- [🔒 Sécurité](#sécurité)
+- [🧪 Tests](#tests)
+- [📜 Licence](#licence)
+
+---
+
+## À propos
+
+**ProxForge** est un outil écrit en Bash pour automatiser la création de machines virtuelles sur **Proxmox VE 9.x**.
+
+La version actuelle propose une commande principale, appelée CLI, qui permet de choisir une distribution Linux, de consulter les versions disponibles, de vérifier les images et de lancer la création d'une VM.
+
+Deux distributions sont actuellement prises en charge par cette CLI :
+
+- **Fedora**
+- **Debian**
+
+Le dépôt contient aussi d'anciens scripts pour Windows, LXC, le réseau et Docker. Ils sont rangés dans le dossier `legacy/` pour les garder séparés du nouvel outil.
+
+> [!IMPORTANT]
+> Pour les nouveaux déploiements, il est conseillé d'utiliser la CLI `proxforge`. Les anciens scripts de `legacy/` sont conservés à part et ne bénéficient pas des mêmes tests ni des mêmes contrôles.
+
+---
+
+## Fonctionnalités
+
+| | Fonctionnalité | Explication |
+| :---: | --- | --- |
+| 🐧 | **VM Linux** | Crée des machines virtuelles Fedora ou Debian. |
+| 💿 | **Vérification des images** | Vérifie les fichiers téléchargés avant de les utiliser. |
+| ⚙️ | **Profils prêts à l'emploi** | Propose plusieurs profils pour choisir les ressources de la VM. |
+| 🧰 | **Commandes de contrôle** | Affiche les informations sur Proxmox, les modules, les profils et les opérations. |
+| 📝 | **Suivi des opérations** | Garde des informations sur les opérations lancées avec ProxForge. |
+| 📦 | **Anciens scripts conservés** | Garde les scripts Windows, LXC, réseau et Docker dans `legacy/`. |
+
+---
+
+## Prérequis
+
+Pour installer et utiliser la CLI sur un serveur :
+
+- Un serveur **Proxmox VE 9.x** basé sur **Debian 13**.
+- Un accès au terminal du serveur.
+- Les droits **root** pour installer ProxForge.
+- Les outils nécessaires à ProxForge, notamment `bash`, `jq` et les commandes Proxmox.
+
+Pour consulter le code et lancer les tests, un ordinateur avec Bash et `jq` suffit. ShellCheck est également nécessaire pour le contrôle du code.
+
+---
+
+## Structure du projet
+
+Les fichiers sont rangés par rôle pour que l'on sache facilement où trouver le code.
+
+```text
+ProxForge/
+├── src/                       # Code principal de ProxForge
+│   ├── core/                  # Fonctionnement interne de l'outil
+│   ├── distributions/         # Modules Fedora et Debian
+│   ├── config/                # Configuration par défaut
+│   ├── profiles/              # Profils des machines virtuelles
+│   ├── schemas/               # Règles de vérification des fichiers JSON
+│   ├── trust/                 # Clés et empreintes de confiance
+│   └── proxforge.sh           # Programme principal
+├── scripts/                   # Installation et désinstallation
+├── tests/                     # Tests automatiques
+├── legacy/                    # Anciens scripts indépendants
+│   ├── vm/
+│   │   ├── linux/
+│   │   └── windows/
+│   ├── lxc/
+│   ├── network/
+│   └── docker-vm/
+├── docs/                      # Documentation
+├── proxforge.sh               # Commande de lancement
+├── Makefile                   # Commandes de test
+├── CONTRIBUTING.md            # Guide pour contribuer
+└── LICENSE                    # Licence MIT
+```
+
+---
+
+## Installation
+
+Commencez par récupérer le dépôt :
 
 ```bash
 git clone https://github.com/Djo-wq/proxmox-scripts.git
 cd proxmox-scripts
 ```
 
-### Lire l'aide et exécuter les contrôles
-
-Sur une machine de développement disposant de Bash, `jq` et ShellCheck :
-
-```bash
-bash proxforge.sh --help
-make check
-```
-
-### Installer sur un nœud de test Proxmox
-
-L'installation système est destinée à Proxmox VE 9.x sur Debian 13 et doit être exécutée en tant que root :
+Sur votre serveur Proxmox, lancez ensuite l'installation en tant que root :
 
 ```bash
 sudo bash scripts/install.sh
 ```
 
-Pour autoriser l'installation des dépendances Debian documentées :
+Pour installer les dépendances Debian manquantes :
 
 ```bash
 sudo bash scripts/install.sh --install-dependencies
 ```
 
-Le provisionnement du trousseau public Fedora est une étape séparée et explicite :
+Le trousseau public Fedora peut être installé séparément :
 
 ```bash
 sudo bash scripts/install.sh --provision-fedora-keyring
 ```
 
-Sans cette option, aucun téléchargement de trousseau n'est effectué.
+Cette dernière option est facultative. Sans elle, ProxForge ne télécharge pas le trousseau Fedora.
 
-## Utiliser la CLI
+---
 
-Quelques commandes d'inspection :
+## Utilisation
+
+Une fois installé, la commande `proxforge` est disponible dans le terminal.
+
+### Voir l'aide
 
 ```bash
-proxforge --version
-proxforge doctor
+proxforge --help
+```
+
+### Voir les distributions disponibles
+
+```bash
 proxforge module list
-proxforge module show fedora
+```
+
+### Voir les versions de Fedora ou Debian
+
+```bash
+proxforge module releases fedora
 proxforge module releases debian
+```
+
+### Vérifier un module
+
+```bash
 proxforge module validate fedora
 proxforge module validate debian
+```
+
+### Voir les profils disponibles
+
+```bash
 proxforge profile list
-proxforge config show
+```
+
+### Vérifier le serveur Proxmox
+
+```bash
+proxforge doctor
 proxforge pve doctor
 proxforge pve nodes
 proxforge pve storages
 proxforge pve bridges
 ```
 
-Les commandes d'inspection ne doivent pas créer de VM. La commande `deploy` crée réellement une ressource Proxmox :
+### Créer une machine virtuelle
+
+Exemple pour créer une VM Fedora avec le profil `standard` :
 
 ```bash
 proxforge deploy fedora stable standard local-lvm vmbr0 --name fedora-lab --vmid auto
 ```
 
-N'exécuter cette commande que sur un nœud de test, avec un stockage, un bridge et une capacité réservés aux essais.
+> [!WARNING]
+> La commande `deploy` crée réellement une machine virtuelle sur votre serveur Proxmox. Vérifiez le stockage, le réseau et les ressources disponibles avant de la lancer. Pour les premiers essais, utilisez un serveur de test.
 
-La configuration persistante est installée sous `/etc/proxforge/config.json`. Les valeurs par défaut du dépôt sont dans `src/config/defaults.json`. Le mode Debian reposant sur un checksum officiel obtenu par TLS reste désactivé par défaut.
+---
 
-## Structure du dépôt
+## Personnalisation
 
-```text
-.
-├── .github/                 # CI et modèles GitHub
-├── src/                     # Application ProxForge maintenue
-│   ├── core/                # Bootstrap, managers et adaptateurs
-│   ├── distributions/       # Modules Fedora et Debian
-│   ├── config/              # Configuration par défaut
-│   ├── profiles/            # Profils VM
-│   ├── schemas/             # Contrats JSON
-│   ├── trust/               # Registre d'empreintes de confiance
-│   └── proxforge.sh         # Implémentation de la CLI
-├── scripts/                 # Installation, désinstallation, clés
-├── tests/                   # Tests hermétiques et fixtures
-├── legacy/                  # Scripts autonomes historiques
-│   ├── vm/linux/
-│   ├── vm/windows/
-│   ├── lxc/
-│   ├── network/
-│   └── docker-vm/
-├── docs/                    # Architecture, développement et phases
-├── proxforge.sh             # Lanceur stable vers src/proxforge.sh
-├── Makefile
-├── CONTRIBUTING.md
-└── LICENSE
-```
+ProxForge utilise des profils pour définir les ressources des machines virtuelles.
 
-Le moteur maintenu est regroupé sous `src/`. Le fichier `proxforge.sh` à la racine est conservé comme point d'entrée stable pour les utilisateurs et les scripts existants. Les scripts autonomes sont archivés sous `legacy/` et ne font pas partie du runtime modulaire.
-
-## Installation et données
-
-L'installateur prépare les répertoires suivants :
-
-- `/usr/local/lib/proxforge` : application complète, dont `src/` ;
-- `/usr/local/bin/proxforge` : lien vers le lanceur ;
-- `/etc/proxforge` : configuration ;
-- `/var/lib/proxforge` : cache, temporaires et état ;
-- `/var/log/proxforge` : journaux.
-
-La désinstallation conserve la configuration et les données par défaut :
+Vous pouvez consulter les profils fournis :
 
 ```bash
-sudo bash /usr/local/lib/proxforge/scripts/uninstall.sh
+proxforge profile list
+proxforge profile show standard
 ```
 
-La suppression de la configuration ou des données nécessite les options explicites `--remove-config` et `--remove-data`.
+La configuration de l'installation se trouve dans :
+
+```text
+/etc/proxforge/config.json
+```
+
+Les valeurs de départ fournies avec le projet se trouvent dans `src/config/defaults.json`.
+
+---
+
+## Sécurité
+
+Quelques règles importantes :
+
+- Vérifiez toujours le stockage et le réseau avant de créer une VM.
+- Commencez par les commandes d'inspection avant de lancer un déploiement.
+- La commande `deploy` crée une ressource sur Proxmox.
+- Les commandes de retour arrière et de désinstallation peuvent modifier ou supprimer des ressources.
+- Les scripts de `legacy/` sont anciens : vérifiez-les individuellement avant de les utiliser.
+
+Les tests automatiques n'installent rien sur un vrai serveur Proxmox et ne créent aucune VM. Ils vérifient le fonctionnement du code dans un environnement de test.
+
+---
+
+## Tests
+
+Pour vérifier le projet, placez-vous à la racine du dépôt puis lancez :
+
+```bash
+make check
+```
+
+Pour vérifier uniquement la syntaxe des scripts Bash :
+
+```bash
+make syntax
+```
+
+Les scripts de `legacy/` sont uniquement contrôlés pour vérifier leur syntaxe. Ils ne sont pas exécutés par les tests.
+
+---
 
 ## Documentation
 
-- [Index de la documentation](docs/README.md)
-- [Architecture](docs/architecture/overview.md)
-- [Organisation du dépôt](docs/development/repository-layout.md)
-- [Tests et pré-vol](docs/development/testing.md)
+Pour plus d'informations :
+
+- [Architecture du projet](docs/architecture/overview.md)
+- [Organisation des fichiers](docs/development/repository-layout.md)
+- [Installation et tests](docs/development/testing.md)
 - [Anciens scripts](docs/legacy/README.md)
-- [Phase 10 — Installation](docs/phases/phase-10-installation.md)
-- [Phase 11 — Audit final](docs/phases/phase-11-final-audit.md)
+- [Historique des phases](docs/README.md)
 - [Guide de contribution](CONTRIBUTING.md)
 
-## Sécurité et limites
-
-Les commandes `deploy`, `operation rollback` et les opérations de désinstallation ou de nettoyage peuvent modifier des ressources. Vérifier les identifiants, la propriété des ressources, le stockage et l'état du cluster avant toute mutation.
-
-La CI utilise des tests hermétiques et des commandes simulées. Elle ne certifie pas le comportement sur un serveur Proxmox réel. La première validation doit être faite sur un nœud de test dédié, en commençant par les commandes d'inspection.
-
-Consulter [les étapes de pré-vol](docs/development/testing.md) avant le premier déploiement.
+---
 
 ## Licence
 
-Voir [LICENSE](LICENSE).
+Ce projet est distribué sous licence **MIT**. Vous pouvez l'utiliser, le modifier et le partager, dans le respect de cette licence.
