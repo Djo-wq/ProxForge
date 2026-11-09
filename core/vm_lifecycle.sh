@@ -148,13 +148,21 @@ pf_vm_lifecycle_set_state() {
 
 pf_vm_lifecycle_add_resource() {
   local resource="$1" timestamp json
-  jq -e 'type == "object" and (.resource_type|type=="string") and (.created_at|type=="string") and (.ownership_verified|type=="boolean")' \
-    <<< "$resource" >/dev/null || return 1
+  if ! jq -e 'type == "object" and (.resource_type|type=="string") and (.created_at|type=="string") and (.ownership_verified|type=="boolean")' <<< "$resource" >/dev/null; then
+    pf_vm_lifecycle_error "Resource record is invalid: $(jq -c . <<< "$resource" 2>/dev/null || printf 'unparseable-json')"
+    return 1
+  fi
   timestamp=$(pf_vm_lifecycle_now) || return 1
   json=$(jq -c --argjson resource "$resource" --arg timestamp "$timestamp" '
     .created_resources += [$resource] | .updated_at=$timestamp
-  ' <<< "$PF_VM_MANIFEST_JSON") || return 1
-  pf_vm_lifecycle_write_manifest "$json"
+  ' <<< "$PF_VM_MANIFEST_JSON") || {
+    pf_vm_lifecycle_error "Could not append resource record to operation manifest."
+    return 1
+  }
+  pf_vm_lifecycle_write_manifest "$json" || {
+    pf_vm_lifecycle_error "Could not atomically persist updated operation manifest."
+    return 1
+  }
 }
 
 pf_vm_lifecycle_vm_resource() {
