@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxforge.invalid/schemas/config.schema.json",
+  "title": "ProxForge system configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "default_profile", "rollback_mode", "start_vm",
+    "allow_official_tls_checksum", "image_cache_dir", "tmp_dir", "state_dir", "log_dir", "log_level"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "default_profile": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$"},
+    "rollback_mode": {"type": "string", "enum": ["auto", "keep"]},
+    "start_vm": {"type": "boolean"},
+    "allow_official_tls_checksum": {"type": "boolean"},
+    "image_cache_dir": {"type": "string", "pattern": "^/"},
+    "tmp_dir": {"type": "string", "pattern": "^/"},
+    "state_dir": {"type": "string", "pattern": "^/"},
+    "log_dir": {"type": "string", "pattern": "^/"},
+    "log_level": {"type": "string", "enum": ["DEBUG", "INFO", "WARN", "ERROR"]}
+  }
+}
