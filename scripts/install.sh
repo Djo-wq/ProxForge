@@ -33,6 +33,17 @@ USAGE
 fail() { printf '[ERROR] ProxForge installer: %s\n' "$*" >&2; exit 1; }
 info() { printf '[INFO] %s\n' "$*"; }
 
+reject_symlink_prefix_components() {
+  local target="$1" current="" part
+  local -a parts
+  IFS='/' read -r -a parts <<< "${target#/}"
+  for part in "${parts[@]}"; do
+    [[ -n "$part" ]] || continue
+    current="$current/$part"
+    [[ ! -L "$current" ]] || fail "refusing to use a staging prefix that traverses a symbolic link: $current"
+  done
+}
+
 while (( $# > 0 )); do
   case "$1" in
     --provision-fedora-keyring) PROVISION_FEDORA_KEYRING=true; shift ;;
