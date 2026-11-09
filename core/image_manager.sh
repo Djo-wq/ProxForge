@@ -87,9 +87,24 @@ pf_image_validate_descriptor() {
   case "$verification_method" in
     signed-checksum)
       [[ "$(jq -r '.signature == null' <<< "$descriptor_json")" == "false" ]] || {
-        pf_image_error "signed-checksum requires a detached signature."
+        pf_image_error "signed-checksum requires a signature descriptor."
         return 1
       }
+      local signature_format
+      signature_format=$(jq -r '.signature.format' <<< "$descriptor_json") || return 1
+      case "$signature_format" in
+        openpgp) ;;
+        openpgp-clearsigned-checksum)
+          [[ "$(jq -r '.signature.url' <<< "$descriptor_json")" == "$checksum_url" ]] || {
+            pf_image_error "A clearsigned checksum must use the checksum URL as its signature URL."
+            return 1
+          }
+          ;;
+        *)
+          pf_image_error "Unsupported OpenPGP signature format: $signature_format"
+          return 1
+          ;;
+      esac
       ;;
     official-tls-checksum)
       [[ "$(jq -r '.signature == null' <<< "$descriptor_json")" == "true" ]] || {
@@ -346,7 +361,15 @@ pf_image_verify_signature() {
     rm -f -- "$status_file" "$error_file"
     return 1
   }
-  mapfile -t valid_fingerprints < <(awk '$1 == "[GNUPG:]" && $2 == "VALIDSIG" { print toupper($3) }' "$status_file")
+  # VALIDSIG ends with the primary-key fingerprint when a signing subkey is used.
+  mapfile -t valid_fingerprints < <(awk '
+    $1 == "[GNUPG:]" && $2 == "VALIDSIG" {
+      fingerprint=$3
+      candidate=$NF
+      if (length(candidate) == 40 || length(candidate) == 64) fingerprint=candidate
+      print toupper(fingerprint)
+    }
+  ' "$status_file")
   rm -f -- "$status_file" "$error_file"
 
   if (( ${#valid_fingerprints[@]} != 1 )); then
@@ -360,6 +383,109 @@ pf_image_verify_signature() {
   fi
 
   pf_image_error "Signature is valid but its signing fingerprint is not pinned."
+  return 1
+}
+
+
+
+pf_image_verify_clearsigned_checksum() {
+  local signed_file="$1" keyring_id="$2" verified_output="$3"
+  local keyring_file status_file error_file expected_json fingerprint
+  local -a valid_fingerprints=()
+
+  [[ -f "$signed_file" && ! -L "$signed_file" && -r "$signed_file" ]] || {
+    pf_image_error "Fedora signed CHECKSUM file is missing or unsafe."
+    return 1
+  }
+  [[ ! -e "$verified_output" && ! -L "$verified_output" ]] || {
+    pf_image_error "Verified CHECKSUM output path already exists or is unsafe."
+    return 1
+  }
+  pf_core_is_safe_id "$keyring_id" || {
+    pf_image_error "Invalid trusted keyring identifier: $keyring_id"
+    return 1
+  }
+  [[ -r "$PF_IMAGE_TRUST_FILE" && -f "$PF_IMAGE_TRUST_FILE" && ! -L "$PF_IMAGE_TRUST_FILE" ]] || {
+    pf_image_error "Trusted keyring registry is missing."
+    return 1
+  }
+  pf_image_check_secure_path "$PF_IMAGE_TRUST_FILE" file || return 1
+  jq -e --arg id "$keyring_id" '
+    type == "object" and
+    (keys - ["schema_version", "keyrings"] | length == 0) and
+    .schema_version == 1 and
+    (.keyrings | type == "object") and
+    (.keyrings | to_entries | all(.[];
+      (.key | test("^[a-z][a-z0-9-]{1,31}$")) and
+      (.value | type == "object" and
+        (keys - ["fingerprints"] | length == 0) and
+        (.fingerprints | type == "array" and length > 0 and
+          length == (unique | length) and
+          all(.[]; type == "string" and test("^([A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$")))
+      )
+    )) and
+    (.keyrings[$id] | type == "object")
+  ' "$PF_IMAGE_TRUST_FILE" >/dev/null || {
+    pf_image_error "No valid pinned fingerprints configured for keyring: $keyring_id"
+    return 1
+  }
+
+  keyring_file="${PF_IMAGE_TRUST_ROOT}/keyrings/${keyring_id}.gpg"
+  pf_image_check_secure_path "$PF_IMAGE_TRUST_ROOT" directory || return 1
+  pf_image_check_secure_path "${PF_IMAGE_TRUST_ROOT}/keyrings" directory || return 1
+  pf_image_check_secure_path "$keyring_file" file || {
+    pf_image_error "Trusted GPG keyring is missing or unsafe: $keyring_file"
+    return 1
+  }
+  pf_core_require_command gpgv || return 1
+
+  status_file=$(mktemp "${TMPDIR:-/tmp}/proxforge-gpg-status.XXXXXX") || return 1
+  error_file=$(mktemp "${TMPDIR:-/tmp}/proxforge-gpg-error.XXXXXX") || {
+    rm -f -- "$status_file"
+    return 1
+  }
+
+  if ! gpgv --status-fd 1 --keyring "$keyring_file" --output "$verified_output" \
+    "$signed_file" >"$status_file" 2>"$error_file"; then
+    rm -f -- "$status_file" "$error_file" "$verified_output"
+    pf_image_error "Fedora clearsigned CHECKSUM signature verification failed."
+    return 1
+  fi
+
+  if [[ ! -f "$verified_output" || -L "$verified_output" || ! -s "$verified_output" ]]; then
+    rm -f -- "$status_file" "$error_file" "$verified_output"
+    pf_image_error "OpenPGP verification did not produce a safe plaintext CHECKSUM."
+    return 1
+  fi
+
+  expected_json=$(jq -c --arg id "$keyring_id" '.keyrings[$id].fingerprints | map(ascii_upcase)' "$PF_IMAGE_TRUST_FILE") || {
+    rm -f -- "$status_file" "$error_file" "$verified_output"
+    return 1
+  }
+  # VALIDSIG ends with the primary-key fingerprint when a signing subkey is used.
+  mapfile -t valid_fingerprints < <(awk '
+    $1 == "[GNUPG:]" && $2 == "VALIDSIG" {
+      fingerprint=$3
+      candidate=$NF
+      if (length(candidate) == 40 || length(candidate) == 64) fingerprint=candidate
+      print toupper(fingerprint)
+    }
+  ' "$status_file")
+  rm -f -- "$status_file" "$error_file"
+
+  if (( ${#valid_fingerprints[@]} != 1 )); then
+    rm -f -- "$verified_output"
+    pf_image_error "Exactly one valid Fedora signing fingerprint is required."
+    return 1
+  fi
+  fingerprint="${valid_fingerprints[0]}"
+  if jq -e --arg fp "$fingerprint" 'index($fp) != null' <<< "$expected_json" >/dev/null; then
+    PF_IMAGE_SIGNATURE_FINGERPRINT="$fingerprint"
+    return 0
+  fi
+
+  rm -f -- "$verified_output"
+  pf_image_error "Fedora CHECKSUM is valid but its signer fingerprint is not pinned."
   return 1
 }
 
@@ -472,9 +598,9 @@ pf_image_cache_validate() {
 
 pf_image_acquire_locked() {
   local distribution="$1" descriptor_json="$2" release="$3" architecture="$4"
-  local image_url checksum_url checksum_algorithm signature_url
-  local allowed_hosts method trust_level disk_format filename keyring_id
-  local stage_dir checksum_file signature_file image_temp metadata_temp
+  local image_url checksum_url checksum_algorithm signature_url signature_format
+  local allowed_hosts method trust_level disk_format filename keyring_id checksum_for_parse
+  local stage_dir checksum_file signature_file verified_checksum_file image_temp metadata_temp
   local expected_checksum actual_checksum image_size cache_dir image_path metadata_path
   local timestamp publication_id
 
@@ -502,18 +628,45 @@ pf_image_acquire_locked() {
     rm -rf -- "$stage_dir"
     return 1
   fi
+  checksum_for_parse="$checksum_file"
   if [[ "$method" == "signed-checksum" ]]; then
-    if ! pf_image_download_url "$signature_url" "$allowed_hosts" "$signature_file" "$PF_IMAGE_CHECKSUM_MAX_BYTES"; then
+    signature_format=$(jq -r '.signature.format' <<< "$descriptor_json") || {
       rm -rf -- "$stage_dir"
       return 1
-    fi
-    if ! pf_image_verify_signature "$signature_file" "$checksum_file" "$keyring_id"; then
-      rm -rf -- "$stage_dir"
-      return 1
-    fi
+    }
+    case "$signature_format" in
+      openpgp)
+        if ! pf_image_download_url "$signature_url" "$allowed_hosts" "$signature_file" "$PF_IMAGE_CHECKSUM_MAX_BYTES"; then
+          rm -rf -- "$stage_dir"
+          return 1
+        fi
+        if ! pf_image_verify_signature "$signature_file" "$checksum_file" "$keyring_id"; then
+          rm -rf -- "$stage_dir"
+          return 1
+        fi
+        ;;
+      openpgp-clearsigned-checksum)
+        if [[ "$signature_url" != "$checksum_url" ]]; then
+          pf_image_error "Clearsigned CHECKSUM descriptor URL mismatch."
+          rm -rf -- "$stage_dir"
+          return 1
+        fi
+        verified_checksum_file="$stage_dir/checksums.verified"
+        if ! pf_image_verify_clearsigned_checksum "$checksum_file" "$keyring_id" "$verified_checksum_file"; then
+          rm -rf -- "$stage_dir"
+          return 1
+        fi
+        checksum_for_parse="$verified_checksum_file"
+        ;;
+      *)
+        pf_image_error "Unsupported signed checksum format: $signature_format"
+        rm -rf -- "$stage_dir"
+        return 1
+        ;;
+    esac
   fi
 
-  if ! pf_image_read_expected_checksum "$checksum_file" "$filename" "$checksum_algorithm"; then
+  if ! pf_image_read_expected_checksum "$checksum_for_parse" "$filename" "$checksum_algorithm"; then
     rm -rf -- "$stage_dir"
     return 1
   fi

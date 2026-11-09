@@ -49,7 +49,7 @@ fi
 printf 'HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\n' > "$headers"
 case "$url" in
   https://images.example.test/SHA256SUMS)
-    cp -- "$FAKE_CHECKSUM_FILE" "$output"
+    cp -- "${FAKE_CHECKSUM_SOURCE:-$FAKE_CHECKSUM_FILE}" "$output"
     ;;
   https://images.example.test/fedora-cloud.qcow2)
     if [[ "${FAKE_BAD_IMAGE:-0}" == "1" ]]; then
@@ -201,6 +201,11 @@ if pf_image_init >/dev/null 2>&1; then
 fi
 pass "symlinked cache roots rejected before directory creation"
 
+# Restore the trusted test cache before running the OpenPGP/cache integration cases.
+jq --arg cache "$CACHE_DIR" '.image_cache_dir=$cache' "$CONFIG_FILE" > "$CONFIG_FILE.new"
+mv "$CONFIG_FILE.new" "$CONFIG_FILE"
+pf_core_config_load "$CONFIG_FILE" || fail "Could not restore the trusted image cache fixture"
+
 if pf_image_verify_signature "$TMP_ROOT/nonexistent.sig" "$FAKE_CHECKSUM_FILE" vendor >/dev/null 2>&1; then
   fail "Unknown signing keyring was accepted"
 fi
@@ -229,6 +234,55 @@ if command -v gpg >/dev/null 2>&1 && command -v gpgv >/dev/null 2>&1; then
   pf_image_verify_signature "$signature_file" "$signed_payload" vendor || fail "Correct pinned OpenPGP signature was rejected"
   [[ "$PF_IMAGE_SIGNATURE_FINGERPRINT" == "$signing_fingerprint" ]] || fail "Verified signing fingerprint was not returned"
   pass "detached OpenPGP signature accepted for the exact pinned fingerprint"
+
+  # Fedora publishes a clear-signed CHECKSUM document, not a separate .sig file.
+  clear_signed_file="$TMP_ROOT/Fedora-CHECKSUM"
+  verified_checksum_file="$TMP_ROOT/Fedora-CHECKSUM.verified"
+  gpg --homedir "$GNUPGHOME" --batch --yes --pinentry-mode loopback --passphrase "" \
+    --local-user "$signing_fingerprint" --output "$clear_signed_file" --clearsign "$FAKE_CHECKSUM_FILE" >/dev/null 2>&1
+  pf_image_verify_clearsigned_checksum "$clear_signed_file" vendor "$verified_checksum_file" ||
+    fail "Valid Fedora-style clearsigned CHECKSUM was rejected"
+  cmp -s "$FAKE_CHECKSUM_FILE" "$verified_checksum_file" ||
+    fail "gpgv did not return the authenticated plaintext CHECKSUM"
+  pass "Fedora clearsigned CHECKSUM verifies and yields authenticated plaintext"
+
+  descriptor_clearsigned=$(jq '
+    .release="40.5" |
+    .signature={url:.checksum.url,format:"openpgp-clearsigned-checksum",keyring_id:"vendor"} |
+    .verification={method:"signed-checksum",trust_level:"signed"}
+  ' <<< "$descriptor")
+  export FAKE_CHECKSUM_SOURCE="$clear_signed_file"
+  pf_image_validate_descriptor "$descriptor_clearsigned" ||
+    fail "Image Manager rejected a valid Fedora clearsigned descriptor"
+  pf_image_acquire fedora "$descriptor_clearsigned" ||
+    fail "Fedora clearsigned image acquisition failed"
+  jq -e '.verification_method=="signed-checksum" and .trust_level=="signed" and .verification_result==true' \
+    "$PF_IMAGE_PATH.json" >/dev/null || fail "Fedora image cache metadata did not retain signed trust level"
+  [[ "$PF_IMAGE_CACHE_HIT" == "false" ]] || fail "First clearsigned acquisition should be a cache miss"
+  clearsigned_image_count=$(grep -Fc 'https://images.example.test/fedora-cloud.qcow2' "$FAKE_CURL_LOG" || true)
+  pf_image_acquire fedora "$descriptor_clearsigned" ||
+    fail "Fedora clearsigned cache hit failed signature re-verification"
+  [[ "$PF_IMAGE_CACHE_HIT" == "true" ]] || fail "Second clearsigned acquisition should be a cache hit"
+  [[ "$(grep -Fc 'https://images.example.test/fedora-cloud.qcow2' "$FAKE_CURL_LOG" || true)" == "$clearsigned_image_count" ]] ||
+    fail "Clearsigned cache hit downloaded the image again"
+  pass "Fedora clearsigned CHECKSUM gates both cache publication and every cache hit"
+
+  tampered_digest=$(printf '%064d' 0)
+  sed "s/$digest/$tampered_digest/" "$clear_signed_file" > "$TMP_ROOT/Fedora-CHECKSUM.tampered"
+  [[ "$(<"$TMP_ROOT/Fedora-CHECKSUM.tampered")" != "$(<"$clear_signed_file")" ]] ||
+    fail "Could not mutate the signed Fedora CHECKSUM payload"
+  export FAKE_CHECKSUM_SOURCE="$TMP_ROOT/Fedora-CHECKSUM.tampered"
+  descriptor_tampered=$(jq '.release="40.6"' <<< "$descriptor_clearsigned")
+  if pf_image_acquire fedora "$descriptor_tampered" >/dev/null 2>&1; then
+    fail "Tampered Fedora clearsigned CHECKSUM was accepted"
+  fi
+  tampered_checksum_cache=0
+  if [[ -d "$CACHE_DIR/fedora/40.6" ]]; then
+    tampered_checksum_cache=$(find "$CACHE_DIR/fedora/40.6" -type f | wc -l)
+  fi
+  [[ "$tampered_checksum_cache" == "0" ]] || fail "Image cache was populated after CHECKSUM signature failure"
+  unset FAKE_CHECKSUM_SOURCE
+  pass "Tampered Fedora clearsigned CHECKSUM is rejected before image download or cache publication"
 
   jq -n '{schema_version:1,keyrings:{vendor:{fingerprints:["AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]}}}' > "$PF_IMAGE_TRUST_FILE"
   chmod 0640 "$PF_IMAGE_TRUST_FILE"
