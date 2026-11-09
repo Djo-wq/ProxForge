@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxforge.invalid/schemas/proxmox-inventory.schema.json",
+  "title": "ProxForge Proxmox VE inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "proxmox_version", "local_node",
+    "nodes", "storages", "bridges", "virtual_machines_and_containers"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "proxmox_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "local_node": {"type": "string", "minLength": 1, "maxLength": 63},
+    "nodes": {"type": "array", "items": {"type": "object"}},
+    "storages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["storage", "type", "content", "enabled", "active", "shared", "total_bytes", "used_bytes", "available_bytes"],
+        "properties": {
+          "storage": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$"},
+          "type": {"type": "string"},
+          "content": {"type": "string"},
+          "enabled": {"type": "boolean"},
+          "active": {"type": "boolean"},
+          "shared": {"type": "boolean"},
+          "total_bytes": {"type": ["integer", "number"]},
+          "used_bytes": {"type": ["integer", "number"]},
+          "available_bytes": {"type": ["integer", "number"]}
+        }
+      }
+    },
+    "bridges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["iface", "active"],
+        "properties": {
+          "iface": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,31}$"},
+          "active": {"type": "boolean"}
+        }
+      }
+    },
+    "virtual_machines_and_containers": {"type": "array", "items": {"type": "object"}}
+  }
+}
