@@ -140,7 +140,7 @@ printf 'tampered bytes\n' > "$PF_IMAGE_PATH"
 if pf_image_acquire fedora "$descriptor" >/dev/null 2>&1; then
   fail "Tampered cache image was accepted"
 fi
-[[ -f "$PF_IMAGE_PATH" ]] || fail "Invalid cache entry should be retained for operator inspection"
+[[ -f "$IMAGE_PATH_FIRST" ]] || fail "Invalid cache entry should be retained for operator inspection"
 pass "tampered cache entry rejected without automatic overwrite"
 
 descriptor_bad_host=$(jq '.url="https://unapproved.example.test/fedora-cloud.qcow2"' <<< "$descriptor")
