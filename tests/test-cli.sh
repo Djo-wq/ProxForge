@@ -11,8 +11,8 @@ CLI="$ROOT_DIR/proxforge.sh"
 export PF_CORE_TEST_MODE=1
 export PF_PVE_TEST_MODE=1
 export PF_IMAGE_TEST_MODE=1
-export PF_CORE_ROOT="$ROOT_DIR"
-export PF_CORE_DISTRIBUTIONS_DIR="$ROOT_DIR/distributions"
+export PF_CORE_ROOT="$ROOT_DIR/src"
+export PF_CORE_DISTRIBUTIONS_DIR="$ROOT_DIR/src/distributions"
 
 # The image-cache command checks runtime tool availability but does not use
 # qemu-img while enumerating cached metadata.

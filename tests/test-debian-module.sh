@@ -7,12 +7,12 @@ trap 'rm -rf -- "$TMP_ROOT"' EXIT
 fail() { printf '[FAIL] %s\n' "$*" >&2; exit 1; }
 pass() { printf '[PASS] %s\n' "$*"; }
 
-export PF_CORE_ROOT="$ROOT_DIR"
+export PF_CORE_ROOT="$ROOT_DIR/src"
 export PF_CORE_TEST_MODE=1
 export PF_PVE_TEST_MODE=1
-export PF_CORE_DISTRIBUTIONS_DIR="$ROOT_DIR/distributions"
+export PF_CORE_DISTRIBUTIONS_DIR="$ROOT_DIR/src/distributions"
 
-source "$ROOT_DIR/core/bootstrap.sh"
+source "$ROOT_DIR/src/core/bootstrap.sh"
 pf_core_init || fail "Core initialization failed"
 pf_core_module_load debian || fail "Debian distribution module could not be loaded"
 

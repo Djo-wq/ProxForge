@@ -7,15 +7,15 @@ trap 'rm -rf -- "$TMP_ROOT"' EXIT
 fail() { printf '[FAIL] %s\n' "$*" >&2; exit 1; }
 pass() { printf '[PASS] %s\n' "$*"; }
 
-export PF_CORE_ROOT="$ROOT_DIR"
+export PF_CORE_ROOT="$ROOT_DIR/src"
 export PF_CORE_TEST_MODE=1
 export PF_PVE_TEST_MODE=1
-source "$ROOT_DIR/core/bootstrap.sh"
+source "$ROOT_DIR/src/core/bootstrap.sh"
 pf_core_init || fail "Core initialization failed"
 
 STATE_ROOT="$TMP_ROOT/state"
 mkdir -p "$STATE_ROOT"
-PF_CORE_CONFIG_JSON=$(jq --arg state "$STATE_ROOT" '.state_dir=$state' "$ROOT_DIR/config/defaults.json")
+PF_CORE_CONFIG_JSON=$(jq --arg state "$STATE_ROOT" '.state_dir=$state' "$ROOT_DIR/src/config/defaults.json")
 PF_VM_STATE_ROOT="$STATE_ROOT"
 OP_ID="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 OP_DIR="$STATE_ROOT/$OP_ID"

@@ -18,14 +18,14 @@ MOCK
   chmod 755 "$MOCK_BIN/$command_name"
 done
 export PATH="$MOCK_BIN:$PATH"
-export PF_CORE_TEST_MODE=1 PF_CORE_ROOT="$ROOT_DIR"
-source "$ROOT_DIR/core/bootstrap.sh"
+export PF_CORE_TEST_MODE=1 PF_CORE_ROOT="$ROOT_DIR/src"
+source "$ROOT_DIR/src/core/bootstrap.sh"
 pf_core_init || fail "Core initialization failed"
 pass "Core bootstrap and configuration initialization"
 [[ "$PF_CORE_VERSION" == "1.0.0" ]] || fail "Core version was not loaded"
 [[ "$(jq -r '.default_profile' <<< "$PF_CORE_CONFIG_JSON")" == "standard" ]] || fail "default profile mismatch"
 [[ "$(jq -r '.allow_official_tls_checksum' <<< "$PF_CORE_CONFIG_JSON")" == "false" ]] || fail "trust policy must default to false"
-jq -e . "$ROOT_DIR/schemas/config.schema.json" >/dev/null || fail "Config schema is not valid JSON"
+jq -e . "$ROOT_DIR/src/schemas/config.schema.json" >/dev/null || fail "Config schema is not valid JSON"
 pass "default configuration and config schema loaded"
 CONFIG_OVERRIDE="$TMP_ROOT/config.json"
 cat > "$CONFIG_OVERRIDE" <<'JSON'

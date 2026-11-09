@@ -141,10 +141,10 @@ MOCK
 chmod 755 "$MOCK_BIN/"*
 export PATH="$MOCK_BIN:$PATH"
 
-export PF_CORE_ROOT="$ROOT_DIR"
+export PF_CORE_ROOT="$ROOT_DIR/src"
 export PF_CORE_TEST_MODE=1
 export PF_PVE_TEST_MODE=1
-source "$ROOT_DIR/core/bootstrap.sh"
+source "$ROOT_DIR/src/core/bootstrap.sh"
 pf_core_init || fail "Core initialization failed"
 
 pf_pve_init || fail "PVE 9.2 adapter initialization failed"
@@ -165,7 +165,7 @@ pf_pve_next_vmid || fail "Next VMID discovery failed"
 if pf_pve_vmid_is_available 99 >/dev/null 2>&1; then fail "VMID below minimum was accepted"; fi
 pass "VMID bounds and next-id lookup"
 
-PROFILE=$(<"$ROOT_DIR/profiles/standard.json")
+PROFILE=$(<"$ROOT_DIR/src/profiles/standard.json")
 pf_pve_vm_create 300 test-vm local-lvm vmbr0 "$PROFILE" || fail "VM create primitive failed"
 [[ "$PF_PVE_CREATED_VM_ID" == "300" ]] || fail "Created VMID was not recorded"
 [[ "$(jq -r '.status' "$FAKE_VM_STATUS")" == "stopped" ]] || fail "VM create primitive unexpectedly started the VM"
