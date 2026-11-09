@@ -31,9 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes jq shellcheck
-      - name: Run ShellCheck on Phase 11 entry points
-        run: shellcheck --severity=error proxforge.sh scripts/install.sh scripts/uninstall.sh tests/test-install.sh
       - name: Validate Makefile syntax target
         run: make syntax
-      - name: Run full lint and hermetic test suite
+      - name: Run ShellCheck and the full hermetic test suite
         run: make check
