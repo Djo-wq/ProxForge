@@ -622,8 +622,8 @@ pf_pve_storage_has_owned_volume() {
   local node="$1" storage="$2" volid="$3" vmid="$4" content
   pf_pve_api_get "/nodes/$node/storage/$storage/content" || return 2
   content="$PF_PVE_API_RESULT_JSON"
+  jq -e 'type == "array"' <<< "$content" >/dev/null || return 2
   jq -e --arg volid "$volid" --argjson vmid "$vmid" '
-    type == "array" and
     any(.[]; .volid == $volid and ((.vmid | tonumber?) == $vmid))
   ' <<< "$content" >/dev/null
 }
