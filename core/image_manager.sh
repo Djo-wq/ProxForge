@@ -307,16 +307,16 @@ pf_image_verify_signature() {
     (keys - ["schema_version", "keyrings"] | length == 0) and
     .schema_version == 1 and
     (.keyrings | type == "object") and
-    (.keyrings as $all |
-      ($all | all(to_entries[];
-        (.key | test("^[a-z][a-z0-9-]{1,31}$")) and
-        (.value | type == "object" and
-          (keys - ["fingerprints"] | length == 0) and
-          (.fingerprints | type == "array" and length > 0 and
-           all(.[]; type == "string" and test("^([A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$")) and
-           (map(ascii_upcase) | length == (unique | length)))
-      )) and
-      ($all[$id] | type == "object" and (.fingerprints | type == "array" and length > 0)))
+    (.keyrings | to_entries | all(.[]; 
+      (.key | test("^[a-z][a-z0-9-]{1,31}$")) and
+      (.value | type == "object" and
+        (keys - ["fingerprints"] | length == 0) and
+        (.fingerprints | type == "array" and length > 0 and
+          length == (unique | length) and
+          all(.[]; type == "string" and test("^([A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$")))
+      )
+    )) and
+    (.keyrings[$id] | type == "object")
   ' "$PF_IMAGE_TRUST_FILE" >/dev/null || {
     pf_image_error "No valid pinned fingerprints configured for keyring: $keyring_id"
     return 1
