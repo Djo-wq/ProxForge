@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+# Resolve the entry point before deriving the application root. The installed
+# /usr/local/bin commands are relative symlinks into /usr/local/lib/proxforge.
+SCRIPT_PATH=$(readlink -f -- "${BASH_SOURCE[0]}") || {
+  printf '[ERROR] Unable to resolve the ProxForge entry point.\n' >&2
+  exit 1
+}
+SCRIPT_DIR=$(cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
+unset SCRIPT_PATH
 source "$SCRIPT_DIR/core/bootstrap.sh"
 
 usage() {
