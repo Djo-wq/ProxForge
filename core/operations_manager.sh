@@ -279,7 +279,8 @@ pf_operations_resume_operation() {
     (.storage | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$")) and
     (.bridge | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.:-]{0,31}$")) and
     (.vm_name | type == "string" and length <= 63) and
-    (.requested_vmid | type == "string" and (self == "auto" or test("^[0-9]{3,9}$")))
+    (.requested_vmid | type == "string") and
+    (.requested_vmid == "auto" or (.requested_vmid | test("^[0-9]{3,9}$")))
   ' <<< "$request_json" >/dev/null; then
     flock -u 7 || true
     exec 7>&-
