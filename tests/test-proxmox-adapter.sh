@@ -121,7 +121,7 @@ case "$command" in
           shift 2
           ;;
         --ide2)
-          jq --arg volume "$2" '. + {ide2:$volume}' "$FAKE_VM_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
+          jq --arg volume "$2" '. + {ide2:$volume}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
           mv "$FAKE_VM_CONFIG.new" "$FAKE_VM_CONFIG"
           shift 2
           ;;
