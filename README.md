@@ -34,7 +34,7 @@ cd proxmox-scripts
 Sur une machine de développement disposant de Bash et `jq` :
 
 ```bash
-./proxforge.sh --help
+bash proxforge.sh --help
 bash tests/run-tests.sh
 ```
 
