@@ -141,7 +141,7 @@ pf_distro_validate_image() {
     (.checksum_value | type == "string" and test("^[a-f0-9]{128}$")) and
     (.file_size | type == "number" and floor == . and . > 0) and
     (.source_url | type == "string" and
-      startswith("https://cloud.debian.org/images/cloud/trixie/latest/"))
+      startswith("https://cdimage.debian.org/cdimage/cloud/trixie/latest/"))
   ' "$metadata_path" >/dev/null || return 1
 
   filename=$(jq -r '.filename' "$metadata_path") || return 1
