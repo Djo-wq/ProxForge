@@ -120,7 +120,7 @@ pf_core_validate_module_result() {
           (.filename | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._+-]*$"))) and
         (.signature == null or (.signature | type == "object" and (keys - ["url", "format", "keyring_id"] | length == 0) and
           (.url | type == "string" and startswith("https://") and ((capture("^https://(?<authority>[^/?#]+)").authority | contains("@")) | not)) and
-          .format == "openpgp" and (.keyring_id | type == "string" and length > 0))) and
+          (.format == "openpgp" or .format == "openpgp-clearsigned-checksum") and (.keyring_id | type == "string" and length > 0))) and
         (.verification | type == "object" and (keys - ["method", "trust_level"] | length == 0) and
           ((.method == "signed-checksum" and .trust_level == "signed" and .signature != null) or
            (.method == "official-tls-checksum" and .trust_level == "official_tls"))) and
