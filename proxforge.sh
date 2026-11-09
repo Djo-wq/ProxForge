@@ -278,17 +278,17 @@ completion_bash() {
 _proxforge_complete() {
   local cur prev words cword cli choices module_id
   _init_completion || return
-  cli="\${COMP_WORDS[0]}"
+  cli="${COMP_WORDS[0]}"
   [[ -x "$cli" ]] || cli="$(command -v proxforge.sh 2>/dev/null)"
   if [[ $cword -eq 1 ]]; then
     COMPREPLY=( $(compgen -W '--config --help --version doctor version help profile module config pve image deploy operation completion' -- "$cur") )
     return
   fi
-  case "\${words[1]}" in
+  case "${words[1]}" in
     profile)
       if [[ $cword -eq 2 ]]; then
         COMPREPLY=( $(compgen -W 'list show --help' -- "$cur") )
-      elif [[ $cword -eq 3 && "\${words[2]}" == "show" && -n "$cli" ]]; then
+      elif [[ $cword -eq 3 && "${words[2]}" == "show" && -n "$cli" ]]; then
         choices=$("$cli" profile list 2>/dev/null | jq -r '.[]' 2>/dev/null)
         COMPREPLY=( $(compgen -W "$choices" -- "$cur") )
       fi
@@ -296,11 +296,11 @@ _proxforge_complete() {
     module)
       if [[ $cword -eq 2 ]]; then
         COMPREPLY=( $(compgen -W 'list show releases validate image --help' -- "$cur") )
-      elif [[ $cword -eq 3 && "\${words[2]}" =~ ^(show|releases|validate|image)$ && -n "$cli" ]]; then
+      elif [[ $cword -eq 3 && "${words[2]}" =~ ^(show|releases|validate|image)$ && -n "$cli" ]]; then
         choices=$("$cli" module list 2>/dev/null | jq -r '.[] | select(.loadable==true) | .id' 2>/dev/null)
         COMPREPLY=( $(compgen -W "$choices" -- "$cur") )
-      elif [[ $cword -eq 4 && "\${words[2]}" == "image" && -n "$cli" ]]; then
-        module_id="\${words[3]}"
+      elif [[ $cword -eq 4 && "${words[2]}" == "image" && -n "$cli" ]]; then
+        module_id="${words[3]}"
         choices=$("$cli" module releases "$module_id" 2>/dev/null | jq -r '.[].version' 2>/dev/null)
         COMPREPLY=( $(compgen -W "latest stable $choices" -- "$cur") )
       fi
@@ -308,11 +308,11 @@ _proxforge_complete() {
     config) COMPREPLY=( $(compgen -W 'show path validate --help' -- "$cur") ) ;;
     pve)
       if [[ $cword -eq 2 ]]; then COMPREPLY=( $(compgen -W 'doctor nodes storages bridges vmid --help' -- "$cur") )
-      elif [[ $cword -eq 3 && "\${words[2]}" == "vmid" ]]; then COMPREPLY=( $(compgen -W 'next' -- "$cur") ); fi
+      elif [[ $cword -eq 3 && "${words[2]}" == "vmid" ]]; then COMPREPLY=( $(compgen -W 'next' -- "$cur") ); fi
       ;;
     image)
       if [[ $cword -eq 2 ]]; then COMPREPLY=( $(compgen -W 'cache --help' -- "$cur") )
-      elif [[ $cword -eq 3 && "\${words[2]}" == "cache" ]]; then COMPREPLY=( $(compgen -W 'list' -- "$cur") ); fi
+      elif [[ $cword -eq 3 && "${words[2]}" == "cache" ]]; then COMPREPLY=( $(compgen -W 'list' -- "$cur") ); fi
       ;;
     operation) COMPREPLY=( $(compgen -W 'list show reconcile rollback resume --help' -- "$cur") ) ;;
     deploy)
@@ -322,7 +322,7 @@ _proxforge_complete() {
         choices=$("$cli" module list 2>/dev/null | jq -r '.[] | select(.loadable==true) | .id' 2>/dev/null)
         COMPREPLY=( $(compgen -W "$choices" -- "$cur") )
       elif [[ $cword -eq 3 && -n "$cli" ]]; then
-        module_id="\${words[2]}"
+        module_id="${words[2]}"
         choices=$("$cli" module releases "$module_id" 2>/dev/null | jq -r '.[].version' 2>/dev/null)
         COMPREPLY=( $(compgen -W "latest stable $choices" -- "$cur") )
       elif [[ $cword -eq 4 && -n "$cli" ]]; then
