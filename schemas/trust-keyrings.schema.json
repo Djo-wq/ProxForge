@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://proxforge.invalid/schemas/trust-keyrings.schema.json",
+  "title": "ProxForge trusted OpenPGP keyrings",
+  "description": "Pinned signing fingerprints for detached image checksum signatures.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "keyrings"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "keyrings": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9-]{1,31}$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fingerprints"],
+        "properties": {
+          "fingerprints": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^([A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$"}
+          }
+        }
+      }
+    }
+  }
+}
