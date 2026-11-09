@@ -2,6 +2,7 @@
 # ProxForge VM Lifecycle Manager. Sourced by Core; no host work at source time.
 
 PF_VM_OPERATION_ID=""
+PF_VM_PARENT_OPERATION_ID=""
 PF_VM_OPERATION_DIR=""
 PF_VM_MANIFEST_FILE=""
 PF_VM_EVENTS_FILE=""
@@ -186,15 +187,17 @@ pf_vm_lifecycle_abort() {
 
 pf_vm_lifecycle_make_manifest() {
   local vmid="$1" node="$2" dist="$3" release="$4" profile="$5" digest="$6" storage="$7" rollback="$8"
-  local timestamp json
+  local timestamp json parent
   timestamp=$(pf_vm_lifecycle_now) || return 1
+  parent="$PF_VM_PARENT_OPERATION_ID"
   json=$(jq -cn --arg id "$PF_VM_OPERATION_ID" --arg timestamp "$timestamp" \
     --arg node "$node" --arg dist "$dist" --arg release "$release" --arg profile "$profile" \
-    --arg digest "$digest" --arg storage "$storage" --arg rollback "$rollback" --argjson vmid "$vmid" '
+    --arg digest "$digest" --arg storage "$storage" --arg rollback "$rollback" --arg parent "$parent" --argjson vmid "$vmid" '
       {schema_version:1,operation_id:$id,created_at:$timestamp,updated_at:$timestamp,
        state:"VM_CREATING",vmid:$vmid,node:$node,distribution:$dist,release:$release,
        profile:$profile,image_digest:$digest,storage:$storage,rollback_mode:$rollback,
-       created_resources:[],rollback_status:"NOT_REQUIRED"}
+       created_resources:[],rollback_status:"NOT_REQUIRED"} +
+       (if $parent == "" then {} else {parent_operation_id:$parent} end)
     ') || return 1
   pf_vm_lifecycle_write_manifest "$json"
 }
@@ -226,8 +229,9 @@ pf_vm_lifecycle_deploy() {
   pf_vm_lifecycle_prepare_state_root || return 1
   pf_vm_lifecycle_generate_id || return 1
   details=$(jq -cn --arg dist "$dist" --arg release "$requested_release" --arg profile "$profile_id" \
-    --arg storage "$storage" --arg bridge "$bridge" --arg name "$requested_name" --arg vmid "$requested_vmid" '
-      {distribution:$dist,requested_release:$release,profile:$profile,storage:$storage,bridge:$bridge,vm_name:$name,requested_vmid:$vmid}
+    --arg storage "$storage" --arg bridge "$bridge" --arg name "$requested_name" --arg vmid "$requested_vmid" --arg parent "$PF_VM_PARENT_OPERATION_ID" '
+      {distribution:$dist,requested_release:$release,profile:$profile,storage:$storage,bridge:$bridge,vm_name:$name,requested_vmid:$vmid} +
+      (if $parent == "" then {} else {resumed_from:$parent} end)
     ') || return 1
   pf_vm_lifecycle_begin "$details" || return 1
   pf_vm_lifecycle_event INITIALIZED INITIALIZING SUCCESS "Operation initialized" "$details" || { pf_vm_lifecycle_unlock; return 1; }
