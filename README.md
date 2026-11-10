@@ -116,27 +116,31 @@ ProxForge/
 Commencez par récupérer le dépôt :
 
 ```bash
-git clone https://github.com/Djo-wq/proxmox-scripts.git
-cd proxmox-scripts
+git clone https://github.com/Djo-wq/ProxForge.git
+cd ProxForge
 ```
 
-Sur votre serveur Proxmox, lancez ensuite l'installation en tant que root :
+Depuis le shell de votre serveur Proxmox, exécutez l'installation en tant que root
+(la session Shell Proxmox est généralement déjà ouverte avec ce compte) :
 
 ```bash
-sudo bash scripts/install.sh
+bash scripts/install.sh
 ```
 
-Pour installer les dépendances Debian manquantes :
+Pour installer explicitement les dépendances Debian manquantes :
 
 ```bash
-sudo bash scripts/install.sh --install-dependencies
+bash scripts/install.sh --install-dependencies
 ```
 
-Le trousseau public Fedora peut être installé séparément :
+Le trousseau public Fedora peut être provisionné séparément :
 
 ```bash
-sudo bash scripts/install.sh --provision-fedora-keyring
+bash scripts/install.sh --provision-fedora-keyring
 ```
+
+Si vous lancez ces commandes depuis un compte non-root disposant de `sudo`,
+préfixez chacune d'elles par `sudo`.
 
 Cette dernière option est facultative. Sans elle, ProxForge ne télécharge pas le trousseau Fedora.
 
