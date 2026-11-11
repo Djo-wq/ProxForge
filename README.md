@@ -212,17 +212,29 @@ proxforge deploy fedora stable standard local-lvm vmbr0 --name fedora-lab --vmid
 > La commande `deploy` crée réellement une machine virtuelle sur votre serveur Proxmox. Vérifiez le stockage, le réseau et les ressources disponibles avant de la lancer. Pour les premiers essais, utilisez un serveur de test.
 
 Pour un déploiement Debian, le checksum officiel est vérifié via HTTPS. Cette
-méthode est désactivée par défaut. Pour l'activer explicitement sur le serveur
-de test, modifiez `/etc/proxforge/config.json` et passez
-`allow_official_tls_checksum` à `true`, puis vérifiez la configuration :
+méthode est désactivée par défaut. Pour un essai ponctuel, conservez la
+configuration système inchangée et créez un fichier d'override dédié :
 
 ```bash
-proxforge config validate
+cat > /root/proxforge-debian-test.json <<'JSON'
+{"allow_official_tls_checksum":true}
+JSON
+chmod 0600 /root/proxforge-debian-test.json
+proxforge --config /root/proxforge-debian-test.json config validate
+proxforge --config /root/proxforge-debian-test.json module image debian latest
+```
+
+Pour un déploiement de test explicitement autorisé, passez le même fichier
+avec la commande `deploy` :
+
+```bash
+proxforge --config /root/proxforge-debian-test.json deploy debian latest standard local-lvm vmbr0 --name proxforge-debian-test --vmid auto
 ```
 
 Cette option reconnaît la confiance dans le checksum reçu via TLS ; elle ne
 constitue pas une signature OpenPGP détachée. Ne l'activez que si cette politique
-correspond à votre exigence de sécurité.
+correspond à votre exigence de sécurité. Supprimez le fichier d'override après
+les essais.
 
 ---
 
