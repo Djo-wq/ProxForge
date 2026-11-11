@@ -233,6 +233,8 @@ pass "Existing scsi0 protected; only the exact current unused volume can be atta
 pf_pve_vm_configure_cloudinit 300 local-lvm || fail "Cloud-Init configuration failed"
 [[ "$(jq -r '.ide2' "$FAKE_VM_CONFIG")" == "local-lvm:vm-300-cloudinit,media=cdrom" ]] ||
   fail "Cloud-Init drive does not match Proxmox's generated CD-ROM volume format"
+[[ "$PF_PVE_CLOUDINIT_VOLUME" == "local-lvm:vm-300-cloudinit" ]] ||
+  fail "Adapter did not expose the concrete Cloud-Init volume identifier"
 pf_pve_vm_start 300 || fail "Explicit VM start failed"
 [[ "$(jq -r '.status' "$FAKE_VM_STATUS")" == "running" ]] || fail "VM did not reach running state"
 pass "Cloud-Init attachment and explicit start are read-after-write verified"
