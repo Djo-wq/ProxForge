@@ -237,6 +237,10 @@ pf_pve_vm_start 300 || fail "Explicit VM start failed"
 [[ "$(jq -r '.status' "$FAKE_VM_STATUS")" == "running" ]] || fail "VM did not reach running state"
 pass "Cloud-Init attachment and explicit start are read-after-write verified"
 
+FAKE_PVE_VERSION="pve-manager/9.1.21/legacy"
+export FAKE_PVE_VERSION
+PF_PVE_INITIALIZED=false
+if pf_pve_init >/dev/null 2>&1; then fail "Unsupported PVE 9.1 version was accepted"; fi
 FAKE_PVE_VERSION="pve-manager/8.4.1/legacy"
 export FAKE_PVE_VERSION
 PF_PVE_INITIALIZED=false
