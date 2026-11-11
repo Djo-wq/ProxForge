@@ -8,8 +8,8 @@ PF_MODULE_FAMILY="debian"
 PF_MODULE_VERSION="1.0.0"
 PF_MODULE_ARCHES=("x86_64")
 
-PF_DEBIAN_IMAGE_BASE_URL="https://cdimage.debian.org/cdimage/cloud/trixie/latest"
-PF_DEBIAN_ALLOWED_HOSTS=("cdimage.debian.org" "cloudfront.debian.net")
+PF_DEBIAN_IMAGE_BASE_URL="https://cloud.debian.org/images/cloud/trixie/latest"
+PF_DEBIAN_ALLOWED_HOSTS=("cloud.debian.org" "cdimage.debian.org" "cloudfront.debian.net")
 
 pf_distro_init() {
   PF_MODULE_RESULT_JSON='{}'
@@ -141,7 +141,7 @@ pf_distro_validate_image() {
     (.checksum_value | type == "string" and test("^[a-f0-9]{128}$")) and
     (.file_size | type == "number" and floor == . and . > 0) and
     (.source_url | type == "string" and
-      startswith("https://cdimage.debian.org/cdimage/cloud/trixie/latest/"))
+      startswith("https://cloud.debian.org/images/cloud/trixie/latest/"))
   ' "$metadata_path" >/dev/null || return 1
 
   filename=$(jq -r '.filename' "$metadata_path") || return 1
