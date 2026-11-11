@@ -121,7 +121,9 @@ case "$command" in
           shift 2
           ;;
         --ide2)
-          jq --arg volume "$2" '. + {ide2:$volume}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
+          cloudinit_storage="${2%%:*}"
+          cloudinit_volume="${cloudinit_storage}:vm-${vmid}-cloudinit,media=cdrom"
+          jq --arg volume "$cloudinit_volume" '. + {ide2:$volume}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
           mv "$FAKE_VM_CONFIG.new" "$FAKE_VM_CONFIG"
           shift 2
           ;;
@@ -199,7 +201,9 @@ PF_IMAGE_METADATA_JSON=$(<"$IMAGE.json")
 pf_pve_vm_import_disk 300 "$IMAGE" local-lvm || fail "Verified image import primitive failed"
 [[ "$PF_PVE_IMPORTED_VM_ID" == "300" && "$PF_PVE_IMPORTED_SLOT" == "unused0" ]] || fail "Imported disk identity was not captured"
 [[ "$PF_PVE_IMPORTED_VOLUME" == "local-lvm:vm-300-disk-0" ]] || fail "Imported volume identifier mismatch"
-pass "Import validates image metadata, digest and disk format; records exact new unused volume"
+grep -F "importdisk 300 $IMAGE local-lvm --format raw" "$FAKE_QM_LOG" >/dev/null ||
+  fail "LVM-thin storage was not requested to receive a RAW disk"
+pass "Import validates image metadata and requests RAW for LVM-thin storage"
 
 # An existing system disk must never be silently overwritten.
 jq '. + {scsi0:"local-lvm:pre-existing-system-disk"}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
@@ -227,7 +231,8 @@ fi
 pass "Existing scsi0 protected; only the exact current unused volume can be attached"
 
 pf_pve_vm_configure_cloudinit 300 local-lvm || fail "Cloud-Init configuration failed"
-[[ "$(jq -r '.ide2' "$FAKE_VM_CONFIG")" == "local-lvm:cloudinit" ]] || fail "Cloud-Init drive not attached"
+[[ "$(jq -r '.ide2' "$FAKE_VM_CONFIG")" == "local-lvm:vm-300-cloudinit,media=cdrom" ]] ||
+  fail "Cloud-Init drive does not match Proxmox's generated CD-ROM volume format"
 pf_pve_vm_start 300 || fail "Explicit VM start failed"
 [[ "$(jq -r '.status' "$FAKE_VM_STATUS")" == "running" ]] || fail "VM did not reach running state"
 pass "Cloud-Init attachment and explicit start are read-after-write verified"
