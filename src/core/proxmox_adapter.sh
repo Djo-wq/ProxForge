@@ -19,6 +19,7 @@ PF_PVE_IMPORTED_SLOT=""
 PF_PVE_IMPORTED_RESOURCE_JSON="{}"
 PF_PVE_IMAGE_METADATA_JSON="{}"
 PF_PVE_IMAGE_FORMAT=""
+PF_PVE_CLOUDINIT_VOLUME=""
 
 pf_pve_error() { pf_core_error "Proxmox Adapter: $*"; }
 
@@ -567,7 +568,8 @@ pf_pve_vm_configure_cloudinit() {
     pf_pve_error "Read-after-write verification failed for the generated Cloud-Init CD-ROM on VM $vmid."
     return 1
   fi
-  pf_core_info "Verified Cloud-Init drive on VM $vmid."
+  PF_PVE_CLOUDINIT_VOLUME="${config_value%%,*}"
+  pf_core_info "Verified Cloud-Init drive $PF_PVE_CLOUDINIT_VOLUME on VM $vmid."
 }
 
 pf_pve_vm_start() {
@@ -668,7 +670,8 @@ pf_pve_vm_destroy_managed() {
     all(.[]; .vmid == $vmid and .ownership_verified == true and
       (if .resource_type == "vm" then .node == $node
        elif .resource_type == "cloudinit" then
-         (.slot == "ide2" and (.storage | type == "string") and .volid == (.storage + ":cloudinit"))
+         (.slot == "ide2" and (.storage | type == "string") and
+          .volid == (.storage + ":vm-" + ($vmid | tostring) + "-cloudinit"))
        elif .resource_type == "volume" or .resource_type == "efi" then
          (.volid | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}:[A-Za-z0-9_./+-]+$")) and
          (.storage | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$")) and
@@ -732,9 +735,10 @@ pf_pve_vm_destroy_managed() {
     ') || return 1
     if ! jq -e --argjson owners "$resources_json" --argjson entries "$disk_entries" '
       all($entries[]; . as $disk |
-        if ($disk.raw | test("(^|,)media=cdrom(,|$)")) or $disk.volid == "none" then true
-        elif $disk.slot == "ide2" and ($disk.volid | endswith(":cloudinit")) then
+        if $disk.volid == "none" then true
+        elif $disk.slot == "ide2" then
           any($owners[]; .resource_type == "cloudinit" and .slot == $disk.slot and .volid == $disk.volid)
+        elif ($disk.raw | test("(^|,)media=cdrom(,|$)")) then true
         else
           any($owners[]; (.resource_type == "volume" or .resource_type == "efi") and .volid == $disk.volid)
         end
