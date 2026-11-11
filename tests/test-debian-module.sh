@@ -54,7 +54,8 @@ jq -e '
   .verification.method=="official-tls-checksum" and
   .verification.trust_level=="official_tls" and
   .cloud_init.status=="verified" and .cloud_init.datasource=="NoCloud" and
-  (.allowed_hosts|index("cloud.debian.org")!=null) and\n  (.allowed_hosts|index("cdimage.debian.org")!=null) and
+  (.allowed_hosts|index("cloud.debian.org")!=null) and
+  (.allowed_hosts|index("cdimage.debian.org")!=null) and
   (.allowed_hosts|index("cloudfront.debian.net")!=null)
 ' <<< "$DEBIAN_DESCRIPTOR" >/dev/null || fail "Debian image descriptor does not match the official Cloud image contract"
 
