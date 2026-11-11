@@ -35,18 +35,34 @@ bash scripts/uninstall.sh --prefix "$STAGE_DIR"
 rm -rf -- "$STAGE_DIR"
 ```
 
-Sur un nœud de test Proxmox VE 9.x / Debian 13 dédié, commencer par les commandes d'inspection :
+Sur un nœud de test Proxmox VE 9.2+ / Debian 13 dédié, commencer par les commandes d'inspection :
 
 ```bash
-sudo ./proxforge.sh doctor
-sudo ./proxforge.sh module list
-sudo ./proxforge.sh module validate fedora
-sudo ./proxforge.sh module validate debian
-sudo ./proxforge.sh pve doctor
-sudo ./proxforge.sh pve nodes
-sudo ./proxforge.sh pve storages
-sudo ./proxforge.sh pve bridges
+./proxforge.sh doctor
+./proxforge.sh module list
+./proxforge.sh module validate fedora
+./proxforge.sh module validate debian
+./proxforge.sh pve doctor
+./proxforge.sh pve nodes
+./proxforge.sh pve storages
+./proxforge.sh pve bridges
 ```
+
+Exécuter ces commandes en root (ou les préfixer par `sudo` depuis un compte
+administrateur). Le moteur et l'installateur exigent Proxmox VE 9.2 ou plus récent
+sur Debian 13.
+
+Avant les déploiements de test :
+- **Fedora :** provisionner le trousseau officiel épinglé avec
+  `bash scripts/install.sh --provision-fedora-keyring` lors de l'installation,
+  ou `/usr/local/lib/proxforge/scripts/provision-fedora-keyring.sh` après
+  installation. Sans trousseau valide, le module Fedora échoue volontairement
+  à la vérification de signature.
+- **Debian :** `allow_official_tls_checksum` reste à `false` par défaut.
+  Après avoir examiné cette politique, un test Debian peut activer explicitement
+  `true` dans `/etc/proxforge/config.json`, puis exécuter
+  `proxforge config validate`. Le checksum Debian est vérifié via TLS et non
+  via une signature OpenPGP détachée.
 
 Vérifier les résultats, la disponibilité d'un stockage et d'un bridge de test, les quotas et les sauvegardes avant d'envisager `deploy`. Cette commande crée réellement une VM et ne fait pas partie du pré-vol non-destructif.
 
