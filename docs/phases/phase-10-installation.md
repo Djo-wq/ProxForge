@@ -2,13 +2,13 @@
 
 ## Scope
 
-Phase 10 adds a root-operated installer and uninstaller for the modular ProxForge CLI. The installer is deliberately limited to Proxmox VE 9.x on Debian 13. It does not create VMs, change Proxmox storage or network configuration, install a service, or modify `main`.
+Phase 10 adds a root-operated installer and uninstaller for the modular ProxForge CLI. The installer is deliberately limited to Proxmox VE 9.2 or newer on Debian 13. It does not create VMs, change Proxmox storage or network configuration, install a service, or modify `main`.
 
 ## Host requirements
 
 The system installer requires:
 
-- Proxmox VE 9.x on Debian 13, with `/etc/pve` present;
+- Proxmox VE 9.2 or newer on Debian 13, with `/etc/pve` present;
 - root privileges and Bash 5.1 or newer;
 - `jq`, `curl`, `flock`, `qemu-img`, `sha256sum`, `sha512sum`, `gpgv`, `qm`, `pvesh`, `pvesm`, `pveversion` and `ip`.
 
