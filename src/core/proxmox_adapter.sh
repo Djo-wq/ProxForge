@@ -452,9 +452,15 @@ pf_pve_vm_import_disk() {
   }
   target_format="$PF_PVE_IMAGE_FORMAT"
   # Proxmox block backends (including local-lvm/LVM-thin) only store raw VM disks.
-  # File-based backends can preserve the source QCOW2 format.
+  # File-based backends can preserve the source QCOW2 format. Unknown backends
+  # fail closed instead of guessing an import format.
   case "$storage_type" in
-    lvm|lvmthin|zfspool|rbd|iscsi) target_format="raw" ;;
+    lvm|lvmthin|zfspool|rbd|iscsi|iscsidirect) target_format="raw" ;;
+    dir|nfs|cifs|glusterfs|cephfs|btrfs) ;;
+    *)
+      pf_pve_error "Unsupported VM image storage backend: $storage_type."
+      return 1
+      ;;
   esac
   config_before="$PF_PVE_VM_CONFIG_JSON"
   before_keys=$(jq -c '[keys[] | select(test("^unused[0-9]+$"))]' <<< "$config_before") || return 1
