@@ -567,15 +567,20 @@ pf_pve_vm_configure_cloudinit() {
   }
   pf_pve_vm_get_config "$vmid" || return 1
   config_value=$(jq -r '.ide2 // empty' <<< "$PF_PVE_VM_CONFIG_JSON") || return 1
-  if ! jq -e --arg expected_volume "$storage:vm-$vmid-cloudinit" '
-    type == "string" and
-    (split(",")[0] == $expected_volume) and
-    ((split(",") | index("media=cdrom")) != null)
-  ' <<< "$config_value" >/dev/null; then
-    pf_pve_error "Read-after-write verification failed for the generated Cloud-Init CD-ROM on VM $vmid."
-    return 1
-  fi
   PF_PVE_CLOUDINIT_VOLUME="${config_value%%,*}"
+  [[ "$PF_PVE_CLOUDINIT_VOLUME" == "$storage:vm-$vmid-cloudinit" ]] || {
+    pf_pve_error "Read-after-write verification failed for the generated Cloud-Init volume on VM $vmid."
+    PF_PVE_CLOUDINIT_VOLUME=""
+    return 1
+  }
+  case ",$config_value," in
+    *,media=cdrom,*) ;;
+    *)
+      pf_pve_error "Cloud-Init volume for VM $vmid is not configured as a CD-ROM."
+      PF_PVE_CLOUDINIT_VOLUME=""
+      return 1
+      ;;
+  esac
   pf_core_info "Verified Cloud-Init drive $PF_PVE_CLOUDINIT_VOLUME on VM $vmid."
 }
 
