@@ -431,7 +431,7 @@ pf_pve_validate_cached_image() {
 
 pf_pve_vm_import_disk() {
   local vmid="$1" image_path="$2" storage="$3"
-  local config_before before_keys new_entries new_volume new_slot
+  local config_before before_keys new_entries new_volume new_slot storage_type target_format
   pf_pve_require_initialized || return 1
   pf_pve_valid_vmid "$vmid" || return 1
   pf_pve_vm_is_managed "$vmid" || return 1
@@ -442,9 +442,22 @@ pf_pve_vm_import_disk() {
     return 1
   }
   pf_pve_validate_cached_image "$image_path" || return 1
+  storage_type=$(jq -er --arg storage "$storage" '
+    [.[] | select(.storage == $storage) | .type] |
+    if length == 1 and (.[0] | type == "string") then .[0] else error("storage type is unavailable or ambiguous") end
+  ' <<< "$PF_PVE_STORAGES_JSON") || {
+    pf_pve_error "Could not determine the backend type for storage $storage."
+    return 1
+  }
+  target_format="$PF_PVE_IMAGE_FORMAT"
+  # Proxmox block backends (including local-lvm/LVM-thin) only store raw VM disks.
+  # File-based backends can preserve the source QCOW2 format.
+  case "$storage_type" in
+    lvm|lvmthin|zfspool|rbd|iscsi) target_format="raw" ;;
+  esac
   config_before="$PF_PVE_VM_CONFIG_JSON"
   before_keys=$(jq -c '[keys[] | select(test("^unused[0-9]+$"))]' <<< "$config_before") || return 1
-  if ! qm importdisk "$vmid" "$image_path" "$storage" --format "$PF_PVE_IMAGE_FORMAT"; then
+  if ! qm importdisk "$vmid" "$image_path" "$storage" --format "$target_format"; then
     pf_pve_error "qm importdisk failed for VM $vmid. Any partial volume is left untouched for reconciliation."
     return 1
   fi
@@ -546,10 +559,14 @@ pf_pve_vm_configure_cloudinit() {
   }
   pf_pve_vm_get_config "$vmid" || return 1
   config_value=$(jq -r '.ide2 // empty' <<< "$PF_PVE_VM_CONFIG_JSON") || return 1
-  [[ "$config_value" == "$storage:cloudinit" ]] || {
-    pf_pve_error "Read-after-write verification failed for Cloud-Init drive on VM $vmid."
+  if ! jq -e --arg expected_volume "$storage:vm-$vmid-cloudinit" '
+    type == "string" and
+    (split(",")[0] == $expected_volume) and
+    ((split(",") | index("media=cdrom")) != null)
+  ' <<< "$config_value" >/dev/null; then
+    pf_pve_error "Read-after-write verification failed for the generated Cloud-Init CD-ROM on VM $vmid."
     return 1
-  }
+  fi
   pf_core_info "Verified Cloud-Init drive on VM $vmid."
 }
 
