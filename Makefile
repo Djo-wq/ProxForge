@@ -14,7 +14,7 @@ test:
 	bash tests/run-tests.sh
 
 lint:
-	shellcheck --severity=error proxforge.sh src/proxforge.sh scripts/install.sh scripts/uninstall.sh tests/test-install.sh
+	shellcheck --severity=error proxforge.sh src/proxforge.sh src/core/proxmox_adapter.sh scripts/install.sh scripts/uninstall.sh tests/test-install.sh tests/test-proxmox-adapter.sh
 
 syntax:
 	bash -n proxforge.sh src/proxforge.sh
