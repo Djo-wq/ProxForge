@@ -25,7 +25,7 @@ The module uses Debian's `generic` image rather than `genericcloud`. Debian docu
 
 The canonical directory is:
 
-    https://cdimage.debian.org/cdimage/cloud/trixie/latest/
+    https://cloud.debian.org/images/cloud/trixie/latest/
 
 The image filename is `debian-13-generic-amd64.qcow2`; its SHA-512 entry is read from `SHA512SUMS` in the same directory. The `latest` directory is intentionally used so Debian can refresh the Cloud image without requiring a module filename change. The point release label and the latest Cloud image build are separate concepts.
 
@@ -51,7 +51,7 @@ Official references:
 - Debian releases and lifecycle: https://www.debian.org/releases/trixie/
 - Debian 13.7 release announcement: https://www.debian.org/News/2026/20260912
 - Debian Official Cloud Images and integrity guidance: https://www.debian.org/cloud/
-- Official Debian Cloud image directory: https://cdimage.debian.org/cdimage/cloud/trixie/latest/
+- Official Debian Cloud image directory: https://cloud.debian.org/images/cloud/trixie/latest/
 
 ## Module contract
 
