@@ -12,7 +12,7 @@ The CLI now resolves its actual script path with `readlink -f` before deriving `
 
 ## Installation and removal safeguards reviewed
 
-- The installer verifies the Proxmox VE 9.x / Debian 13 host boundary before a live system install.
+- The installer verifies the Proxmox VE 9.2+ / Debian 13 host boundary before a live system install.
 - The installer stages files before switching the managed application directory, validates the effective JSON configuration, and refuses to overwrite an unmarked application directory.
 - Managed path components and staging prefixes are checked for symbolic links.
 - A lock coordinates installer and uninstaller runs.
@@ -48,4 +48,4 @@ bash tests/test-install.sh
 
 ## Explicitly unverified
 
-A real installation on a Proxmox VE 9.x / Debian 13 host, Fedora network key provisioning, and a complete VM deployment lifecycle on physical Proxmox infrastructure require a dedicated test node and operator-controlled validation. They are not inferred from the staging CI result.
+A real installation on a Proxmox VE 9.2+ / Debian 13 host, Fedora network key provisioning, and a complete VM deployment lifecycle on physical Proxmox infrastructure require a dedicated test node and operator-controlled validation. They are not inferred from the staging CI result.
