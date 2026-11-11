@@ -20,6 +20,7 @@ PF_PVE_IMPORTED_RESOURCE_JSON="{}"
 PF_PVE_IMAGE_METADATA_JSON="{}"
 PF_PVE_IMAGE_FORMAT=""
 PF_PVE_CLOUDINIT_VOLUME=""
+PF_PVE_SYSTEM_DISK_SIZE_BYTES=""
 
 pf_pve_error() { pf_core_error "Proxmox Adapter: $*"; }
 
@@ -542,6 +543,81 @@ pf_pve_vm_attach_imported_disk() {
   }
   PF_PVE_IMPORTED_SLOT="$slot"
   pf_core_info "Verified $volume attached to VM $vmid at $slot."
+}
+
+pf_pve_vm_resize_disk() {
+  local vmid="$1" slot="$2" target_gb="$3"
+  local volume storage device info current_bytes target_bytes
+
+  PF_PVE_SYSTEM_DISK_SIZE_BYTES=""
+  pf_pve_require_initialized || return 1
+  pf_pve_valid_vmid "$vmid" || return 1
+  [[ "$slot" == "scsi0" ]] || {
+    pf_pve_error "Phase 5 only resizes the imported system disk at scsi0."
+    return 1
+  }
+  [[ "$target_gb" =~ ^[0-9]{1,5}$ ]] &&
+    (( 10#$target_gb >= 1 && 10#$target_gb <= 65536 )) || {
+      pf_pve_error "Profile disk size must be an integer between 1 and 65536 GiB."
+      return 1
+    }
+  [[ "$PF_PVE_IMPORTED_VM_ID" == "$vmid" && "$PF_PVE_IMPORTED_SLOT" == "$slot" &&
+     -n "$PF_PVE_IMPORTED_VOLUME" ]] || {
+    pf_pve_error "System disk is not the exact imported volume attached in this process."
+    return 1
+  }
+  pf_pve_vm_is_managed "$vmid" || return 1
+  pf_pve_vm_get_status "$vmid" || return 1
+  [[ "$(jq -r '.status // empty' <<< "$PF_PVE_VM_STATUS_JSON")" == "stopped" ]] || {
+    pf_pve_error "VM $vmid must remain stopped while sizing its system disk."
+    return 1
+  }
+  pf_pve_vm_get_config "$vmid" || return 1
+  volume=$(jq -r --arg slot "$slot" '.[$slot] // empty | split(",")[0]' <<< "$PF_PVE_VM_CONFIG_JSON") || return 1
+  [[ "$volume" == "$PF_PVE_IMPORTED_VOLUME" ]] || {
+    pf_pve_error "VM $vmid system disk no longer matches the imported volume."
+    return 1
+  }
+
+  storage="${volume%%:*}"
+  pf_pve_valid_storage_id "$storage" || return 1
+  device=$(pvesm path "$volume") || {
+    pf_pve_error "Could not resolve the Proxmox volume path for $volume."
+    return 1
+  }
+  [[ -n "$device" && -e "$device" ]] || {
+    pf_pve_error "Resolved system disk path is missing: $device"
+    return 1
+  }
+  info=$(qemu-img info --output=json "$device") || {
+    pf_pve_error "Could not inspect the imported system disk size."
+    return 1
+  }
+  current_bytes=$(jq -er '.["virtual-size"] | select(type == "number" and floor == . and . > 0)' <<< "$info") || {
+    pf_pve_error "Proxmox returned an invalid system disk virtual size."
+    return 1
+  }
+  target_bytes=$((10#$target_gb * 1024 * 1024 * 1024))
+
+  # Treat profile disk_gb as a minimum: never shrink an imported image.
+  if (( current_bytes < target_bytes )); then
+    qm resize "$vmid" "$slot" "${target_gb}G" || {
+      pf_pve_error "Could not grow VM $vmid system disk to at least ${target_gb} GiB."
+      return 1
+    }
+    info=$(qemu-img info --output=json "$device") || {
+      pf_pve_error "System disk resize was requested but its resulting size could not be inspected."
+      return 1
+    }
+    current_bytes=$(jq -er '.["virtual-size"] | select(type == "number" and floor == . and . > 0)' <<< "$info") || return 1
+    (( current_bytes >= target_bytes )) || {
+      pf_pve_error "System disk remains smaller than the selected profile requires after resize."
+      return 1
+    }
+  fi
+
+  PF_PVE_SYSTEM_DISK_SIZE_BYTES="$current_bytes"
+  pf_core_info "Verified VM $vmid system disk at $current_bytes bytes (profile minimum: ${target_gb} GiB)."
 }
 
 pf_pve_vm_configure_cloudinit() {
