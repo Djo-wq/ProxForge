@@ -13,6 +13,10 @@ export FAKE_VM_CONFIG="$TMP_ROOT/vm-config.json"
 export FAKE_VM_STATUS="$TMP_ROOT/vm-status.json"
 export FAKE_VM_RESOURCES="$TMP_ROOT/vm-resources.json"
 export FAKE_QM_LOG="$TMP_ROOT/qm.log"
+export FAKE_DISK_PATH="$TMP_ROOT/imported-system-disk.raw"
+export FAKE_DISK_SIZE_FILE="$TMP_ROOT/imported-system-disk.size"
+: > "$FAKE_DISK_PATH"
+printf '1073741824\n' > "$FAKE_DISK_SIZE_FILE"
 export FAKE_PVE_VERSION="pve-manager/9.2.13/abcdef12"
 printf '{}' > "$FAKE_VM_CONFIG"
 printf '{"status":"stopped"}' > "$FAKE_VM_STATUS"
@@ -65,11 +69,23 @@ printf '[{"ifname":"vmbr0","operstate":"UP","flags":["BROADCAST","UP","LOWER_UP"
 MOCK
 cat > "$MOCK_BIN/pvesm" <<'MOCK'
 #!/usr/bin/env bash
-exit 0
+set -Eeuo pipefail
+if [[ "${1:-}" == "path" && "${2:-}" == "local-lvm:vm-300-disk-0" ]]; then
+  printf '%s\n' "$FAKE_DISK_PATH"
+else
+  printf 'Unexpected pvesm arguments: %s\n' "$*" >&2
+  exit 22
+fi
 MOCK
 cat > "$MOCK_BIN/qemu-img" <<'MOCK'
 #!/usr/bin/env bash
-printf '{"format":"qcow2","virtual-size":1073741824}\n'
+set -Eeuo pipefail
+image_path="${@: -1}"
+if [[ "$image_path" == "$FAKE_DISK_PATH" ]]; then
+  printf '{"format":"raw","virtual-size":%s}\n' "$(cat "$FAKE_DISK_SIZE_FILE")"
+else
+  printf '{"format":"qcow2","virtual-size":1073741824}\n'
+fi
 MOCK
 cat > "$MOCK_BIN/qm" <<'MOCK'
 #!/usr/bin/env bash
@@ -110,6 +126,14 @@ case "$command" in
     volume="${storage}:vm-${vmid}-disk-0"
     jq --arg volume "$volume" '. + {unused0:$volume}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
     mv "$FAKE_VM_CONFIG.new" "$FAKE_VM_CONFIG"
+    : > "$FAKE_DISK_PATH"
+    printf '1073741824\n' > "$FAKE_DISK_SIZE_FILE"
+    ;;
+  resize)
+    vmid="$1"; slot="$2"; size="$3"
+    [[ "$slot" == "scsi0" && "$size" =~ ^[0-9]+G$ ]] || exit 23
+    size_gb="${size%G}"
+    printf '%s\n' "$((size_gb * 1024 * 1024 * 1024))" > "$FAKE_DISK_SIZE_FILE"
     ;;
   set)
     vmid="$1"; shift
@@ -229,6 +253,15 @@ if pf_pve_vm_attach_imported_disk 300 scsi0 local-lvm:vm-300-disk-99 >/dev/null 
   fail "An unrelated volume was accepted for attachment"
 fi
 pass "Existing scsi0 protected; only the exact current unused volume can be attached"
+
+pf_pve_vm_resize_disk 300 scsi0 20 || fail "Profile disk resize failed"
+[[ "$(cat "$FAKE_DISK_SIZE_FILE")" == "21474836480" ]] || fail "System disk was not grown to the profile's 20 GiB minimum"
+[[ "$PF_PVE_SYSTEM_DISK_SIZE_BYTES" == "21474836480" ]] || fail "Resized disk size was not returned to the lifecycle"
+resize_count_before=$(grep -c '^resize ' "$FAKE_QM_LOG" || true)
+pf_pve_vm_resize_disk 300 scsi0 8 || fail "A profile smaller than the existing disk should remain a no-op"
+resize_count_after=$(grep -c '^resize ' "$FAKE_QM_LOG" || true)
+[[ "$resize_count_after" == "$resize_count_before" ]] || fail "Disk resize attempted to shrink an existing disk"
+pass "Profile disk size grows the imported disk when needed and never shrinks it"
 
 pf_pve_vm_configure_cloudinit 300 local-lvm || fail "Cloud-Init configuration failed"
 [[ "$(jq -r '.ide2' "$FAKE_VM_CONFIG")" == "local-lvm:vm-300-cloudinit,media=cdrom" ]] ||
