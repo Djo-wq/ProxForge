@@ -540,6 +540,7 @@ pf_pve_vm_attach_imported_disk() {
 
 pf_pve_vm_configure_cloudinit() {
   local vmid="$1" storage="$2" config_value
+  PF_PVE_CLOUDINIT_VOLUME=""
   pf_pve_require_initialized || return 1
   pf_pve_valid_vmid "$vmid" || return 1
   pf_pve_vm_is_managed "$vmid" || return 1
