@@ -370,8 +370,12 @@ pf_vm_lifecycle_deploy() {
   pf_vm_lifecycle_set_state CLOUD_INIT_CONFIGURING || { pf_vm_lifecycle_abort "Could not persist Cloud-Init state."; return 1; }
   pf_vm_lifecycle_event CLOUD_INIT_CONFIGURED CLOUD_INIT_CONFIGURING INTENT "Configure NoCloud and DHCP" || { pf_vm_lifecycle_abort "Could not journal Cloud-Init intent."; return 1; }
   pf_pve_vm_configure_cloudinit "$vmid" "$storage" || { pf_vm_lifecycle_abort "Cloud-Init configuration failed or is uncertain."; return 1; }
-  cloudinit_resource=$(jq -cn --arg storage "$storage" --arg node "$PF_PVE_NODE" --arg timestamp "$(pf_vm_lifecycle_now)" --argjson vmid "$vmid" '
-    {resource_type:"cloudinit",volid:($storage + ":cloudinit"),storage:$storage,slot:"ide2",role:"cloud-init",vmid:$vmid,node:$node,created_at:$timestamp,ownership_verified:true}
+  [[ "$PF_PVE_CLOUDINIT_VOLUME" == "$storage:vm-$vmid-cloudinit" ]] || {
+    pf_vm_lifecycle_abort "Proxmox did not return the expected VM-owned Cloud-Init volume identifier."
+    return 1
+  }
+  cloudinit_resource=$(jq -cn --arg storage "$storage" --arg volid "$PF_PVE_CLOUDINIT_VOLUME" --arg node "$PF_PVE_NODE" --arg timestamp "$(pf_vm_lifecycle_now)" --argjson vmid "$vmid" '
+    {resource_type:"cloudinit",volid:$volid,storage:$storage,slot:"ide2",role:"cloud-init",vmid:$vmid,node:$node,created_at:$timestamp,ownership_verified:true}
   ') || { pf_vm_lifecycle_abort "Could not create Cloud-Init ownership record."; return 1; }
   pf_vm_lifecycle_add_resource "$cloudinit_resource" || { pf_vm_lifecycle_abort "Cloud-Init ownership record could not be persisted."; return 1; }
   pf_vm_lifecycle_event CLOUD_INIT_CONFIGURED CLOUD_INIT_CONFIGURING SUCCESS "Cloud-Init configuration verified" || { pf_vm_lifecycle_abort "Could not journal Cloud-Init result."; return 1; }
