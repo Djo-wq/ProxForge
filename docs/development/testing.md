@@ -59,10 +59,22 @@ Avant les déploiements de test :
   installation. Sans trousseau valide, le module Fedora échoue volontairement
   à la vérification de signature.
 - **Debian :** `allow_official_tls_checksum` reste à `false` par défaut.
-  Après avoir examiné cette politique, un test Debian peut activer explicitement
-  `true` dans `/etc/proxforge/config.json`, puis exécuter
-  `proxforge config validate`. Le checksum Debian est vérifié via TLS et non
-  via une signature OpenPGP détachée.
+  Le garder désactivé dans `/etc/proxforge/config.json`. Pour un essai ponctuel,
+  créer un override séparé afin de ne pas modifier la configuration persistante :
+
+  ```bash
+  cat > /root/proxforge-debian-test.json <<'JSON'
+  {"allow_official_tls_checksum":true}
+  JSON
+  chmod 0600 /root/proxforge-debian-test.json
+  proxforge --config /root/proxforge-debian-test.json config validate
+  proxforge --config /root/proxforge-debian-test.json module image debian latest
+  ```
+
+  Si le pré-vol est validé et que le déploiement est autorisé, fournir aussi
+  `--config /root/proxforge-debian-test.json` avant `deploy`. Le checksum Debian
+  est vérifié via TLS et non via une signature OpenPGP détachée. Supprimer le
+  fichier d'override à la fin des essais.
 
 Vérifier les résultats, la disponibilité d'un stockage et d'un bridge de test, les quotas et les sauvegardes avant d'envisager `deploy`. Cette commande crée réellement une VM et ne fait pas partie du pré-vol non-destructif.
 
