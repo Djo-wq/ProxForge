@@ -242,6 +242,8 @@ les essais.
 
 ProxForge utilise des profils pour définir les ressources des machines virtuelles.
 
+Le champ `disk_gb` définit une taille minimale pour le disque système : ProxForge agrandit le disque importé si nécessaire et ne le réduit jamais si l'image source est déjà plus grande.
+
 Vous pouvez consulter les profils fournis :
 
 ```bash
