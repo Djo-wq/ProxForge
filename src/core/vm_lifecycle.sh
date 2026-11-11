@@ -206,7 +206,7 @@ pf_vm_lifecycle_deploy() {
   local dist="$1" requested_release="$2" profile_id="$3" storage="$4" bridge="$5"
   local requested_name="" requested_vmid="auto"
   local details resolved_json descriptor_json release channel lifecycle_status
-  local image_path digest trust profile_json vmid vm_name rollback start_vm
+  local image_path digest trust profile_json vmid vm_name rollback start_vm disk_gb
   local vm_resource volume_resource efi_resource cloudinit_resource efi_volid efi_storage
 
   (( $# >= 6 )) && requested_name="$6"
@@ -366,6 +366,13 @@ pf_vm_lifecycle_deploy() {
   pf_vm_lifecycle_event VM_CONFIGURED VM_CONFIGURING INTENT "Attach imported system disk to scsi0" || { pf_vm_lifecycle_abort "Could not journal disk attachment intent."; return 1; }
   pf_pve_vm_attach_imported_disk "$vmid" scsi0 "$PF_PVE_IMPORTED_VOLUME" || { pf_vm_lifecycle_abort "System disk attachment failed or is uncertain."; return 1; }
   pf_vm_lifecycle_event VM_CONFIGURED VM_CONFIGURING SUCCESS "System disk attached and verified" "{}" "$(jq -cn --argjson vmid "$vmid" --arg volid "$PF_PVE_IMPORTED_VOLUME" --arg storage "$storage" '{resource_type:"volume",vmid:$vmid,volid:$volid,storage:$storage}')" || { pf_vm_lifecycle_abort "Could not journal disk attachment."; return 1; }
+
+  disk_gb=$(jq -er '.disk_gb' <<< "$profile_json") || { pf_vm_lifecycle_abort "Could not read profile disk size."; return 1; }
+  details=$(jq -cn --argjson target_gb "$disk_gb" '{profile_minimum_disk_gb:$target_gb}') || details='{}'
+  pf_vm_lifecycle_event VM_CONFIGURED VM_CONFIGURING INTENT "Ensure system disk meets the selected profile size" "$details" || { pf_vm_lifecycle_abort "Could not journal disk sizing intent."; return 1; }
+  pf_pve_vm_resize_disk "$vmid" scsi0 "$disk_gb" || { pf_vm_lifecycle_abort "System disk could not be grown to the selected profile minimum."; return 1; }
+  details=$(jq -cn --argjson target_gb "$disk_gb" --argjson actual_bytes "$PF_PVE_SYSTEM_DISK_SIZE_BYTES" '{profile_minimum_disk_gb:$target_gb,verified_virtual_size_bytes:$actual_bytes}') || details='{}'
+  pf_vm_lifecycle_event VM_CONFIGURED VM_CONFIGURING SUCCESS "System disk size verified against the selected profile" "$details" || { pf_vm_lifecycle_abort "Could not journal disk sizing result."; return 1; }
 
   pf_vm_lifecycle_set_state CLOUD_INIT_CONFIGURING || { pf_vm_lifecycle_abort "Could not persist Cloud-Init state."; return 1; }
   pf_vm_lifecycle_event CLOUD_INIT_CONFIGURED CLOUD_INIT_CONFIGURING INTENT "Configure NoCloud and DHCP" || { pf_vm_lifecycle_abort "Could not journal Cloud-Init intent."; return 1; }
