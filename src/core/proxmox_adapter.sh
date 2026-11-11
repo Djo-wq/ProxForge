@@ -19,6 +19,8 @@ PF_PVE_IMPORTED_SLOT=""
 PF_PVE_IMPORTED_RESOURCE_JSON="{}"
 PF_PVE_IMAGE_METADATA_JSON="{}"
 PF_PVE_IMAGE_FORMAT=""
+PF_PVE_CLOUDINIT_VOLUME=""
+PF_PVE_SYSTEM_DISK_SIZE_BYTES=""
 
 pf_pve_error() { pf_core_error "Proxmox Adapter: $*"; }
 
@@ -431,7 +433,7 @@ pf_pve_validate_cached_image() {
 
 pf_pve_vm_import_disk() {
   local vmid="$1" image_path="$2" storage="$3"
-  local config_before before_keys new_entries new_volume new_slot
+  local config_before before_keys new_entries new_volume new_slot storage_type target_format
   pf_pve_require_initialized || return 1
   pf_pve_valid_vmid "$vmid" || return 1
   pf_pve_vm_is_managed "$vmid" || return 1
@@ -442,9 +444,28 @@ pf_pve_vm_import_disk() {
     return 1
   }
   pf_pve_validate_cached_image "$image_path" || return 1
+  storage_type=$(jq -er --arg storage "$storage" '
+    [.[] | select(.storage == $storage) | .type] |
+    if length == 1 and (.[0] | type == "string") then .[0] else error("storage type is unavailable or ambiguous") end
+  ' <<< "$PF_PVE_STORAGES_JSON") || {
+    pf_pve_error "Could not determine the backend type for storage $storage."
+    return 1
+  }
+  target_format="$PF_PVE_IMAGE_FORMAT"
+  # Proxmox block backends (including local-lvm/LVM-thin) only store raw VM disks.
+  # File-based backends can preserve the source QCOW2 format. Unknown backends
+  # fail closed instead of guessing an import format.
+  case "$storage_type" in
+    lvm|lvmthin|zfspool|rbd|iscsi|iscsidirect) target_format="raw" ;;
+    dir|nfs|cifs|glusterfs|cephfs|btrfs) ;;
+    *)
+      pf_pve_error "Unsupported VM image storage backend: $storage_type."
+      return 1
+      ;;
+  esac
   config_before="$PF_PVE_VM_CONFIG_JSON"
   before_keys=$(jq -c '[keys[] | select(test("^unused[0-9]+$"))]' <<< "$config_before") || return 1
-  if ! qm importdisk "$vmid" "$image_path" "$storage" --format "$PF_PVE_IMAGE_FORMAT"; then
+  if ! qm importdisk "$vmid" "$image_path" "$storage" --format "$target_format"; then
     pf_pve_error "qm importdisk failed for VM $vmid. Any partial volume is left untouched for reconciliation."
     return 1
   fi
@@ -524,8 +545,84 @@ pf_pve_vm_attach_imported_disk() {
   pf_core_info "Verified $volume attached to VM $vmid at $slot."
 }
 
+pf_pve_vm_resize_disk() {
+  local vmid="$1" slot="$2" target_gb="$3"
+  local volume storage device info current_bytes target_bytes
+
+  PF_PVE_SYSTEM_DISK_SIZE_BYTES=""
+  pf_pve_require_initialized || return 1
+  pf_pve_valid_vmid "$vmid" || return 1
+  [[ "$slot" == "scsi0" ]] || {
+    pf_pve_error "Phase 5 only resizes the imported system disk at scsi0."
+    return 1
+  }
+  [[ "$target_gb" =~ ^[0-9]{1,5}$ ]] &&
+    (( 10#$target_gb >= 1 && 10#$target_gb <= 65536 )) || {
+      pf_pve_error "Profile disk size must be an integer between 1 and 65536 GiB."
+      return 1
+    }
+  [[ "$PF_PVE_IMPORTED_VM_ID" == "$vmid" && "$PF_PVE_IMPORTED_SLOT" == "$slot" &&
+     -n "$PF_PVE_IMPORTED_VOLUME" ]] || {
+    pf_pve_error "System disk is not the exact imported volume attached in this process."
+    return 1
+  }
+  pf_pve_vm_is_managed "$vmid" || return 1
+  pf_pve_vm_get_status "$vmid" || return 1
+  [[ "$(jq -r '.status // empty' <<< "$PF_PVE_VM_STATUS_JSON")" == "stopped" ]] || {
+    pf_pve_error "VM $vmid must remain stopped while sizing its system disk."
+    return 1
+  }
+  pf_pve_vm_get_config "$vmid" || return 1
+  volume=$(jq -r --arg slot "$slot" '.[$slot] // empty | split(",")[0]' <<< "$PF_PVE_VM_CONFIG_JSON") || return 1
+  [[ "$volume" == "$PF_PVE_IMPORTED_VOLUME" ]] || {
+    pf_pve_error "VM $vmid system disk no longer matches the imported volume."
+    return 1
+  }
+
+  storage="${volume%%:*}"
+  pf_pve_valid_storage_id "$storage" || return 1
+  device=$(pvesm path "$volume") || {
+    pf_pve_error "Could not resolve the Proxmox volume path for $volume."
+    return 1
+  }
+  [[ -n "$device" && -e "$device" ]] || {
+    pf_pve_error "Resolved system disk path is missing: $device"
+    return 1
+  }
+  info=$(qemu-img info --output=json "$device") || {
+    pf_pve_error "Could not inspect the imported system disk size."
+    return 1
+  }
+  current_bytes=$(jq -er '.["virtual-size"] | select(type == "number" and floor == . and . > 0)' <<< "$info") || {
+    pf_pve_error "Proxmox returned an invalid system disk virtual size."
+    return 1
+  }
+  target_bytes=$((10#$target_gb * 1024 * 1024 * 1024))
+
+  # Treat profile disk_gb as a minimum: never shrink an imported image.
+  if (( current_bytes < target_bytes )); then
+    qm resize "$vmid" "$slot" "${target_gb}G" || {
+      pf_pve_error "Could not grow VM $vmid system disk to at least ${target_gb} GiB."
+      return 1
+    }
+    info=$(qemu-img info --output=json "$device") || {
+      pf_pve_error "System disk resize was requested but its resulting size could not be inspected."
+      return 1
+    }
+    current_bytes=$(jq -er '.["virtual-size"] | select(type == "number" and floor == . and . > 0)' <<< "$info") || return 1
+    (( current_bytes >= target_bytes )) || {
+      pf_pve_error "System disk remains smaller than the selected profile requires after resize."
+      return 1
+    }
+  fi
+
+  PF_PVE_SYSTEM_DISK_SIZE_BYTES="$current_bytes"
+  pf_core_info "Verified VM $vmid system disk at $current_bytes bytes (profile minimum: ${target_gb} GiB)."
+}
+
 pf_pve_vm_configure_cloudinit() {
   local vmid="$1" storage="$2" config_value
+  PF_PVE_CLOUDINIT_VOLUME=""
   pf_pve_require_initialized || return 1
   pf_pve_valid_vmid "$vmid" || return 1
   pf_pve_vm_is_managed "$vmid" || return 1
@@ -546,11 +643,21 @@ pf_pve_vm_configure_cloudinit() {
   }
   pf_pve_vm_get_config "$vmid" || return 1
   config_value=$(jq -r '.ide2 // empty' <<< "$PF_PVE_VM_CONFIG_JSON") || return 1
-  [[ "$config_value" == "$storage:cloudinit" ]] || {
-    pf_pve_error "Read-after-write verification failed for Cloud-Init drive on VM $vmid."
+  PF_PVE_CLOUDINIT_VOLUME="${config_value%%,*}"
+  [[ "$PF_PVE_CLOUDINIT_VOLUME" == "$storage:vm-$vmid-cloudinit" ]] || {
+    pf_pve_error "Read-after-write verification failed for the generated Cloud-Init volume on VM $vmid."
+    PF_PVE_CLOUDINIT_VOLUME=""
     return 1
   }
-  pf_core_info "Verified Cloud-Init drive on VM $vmid."
+  case ",$config_value," in
+    *,media=cdrom,*) ;;
+    *)
+      pf_pve_error "Cloud-Init volume for VM $vmid is not configured as a CD-ROM."
+      PF_PVE_CLOUDINIT_VOLUME=""
+      return 1
+      ;;
+  esac
+  pf_core_info "Verified Cloud-Init drive $PF_PVE_CLOUDINIT_VOLUME on VM $vmid."
 }
 
 pf_pve_vm_start() {
@@ -651,7 +758,8 @@ pf_pve_vm_destroy_managed() {
     all(.[]; .vmid == $vmid and .ownership_verified == true and
       (if .resource_type == "vm" then .node == $node
        elif .resource_type == "cloudinit" then
-         (.slot == "ide2" and (.storage | type == "string") and .volid == (.storage + ":cloudinit"))
+         (.slot == "ide2" and (.storage | type == "string") and
+          .volid == (.storage + ":vm-" + ($vmid | tostring) + "-cloudinit"))
        elif .resource_type == "volume" or .resource_type == "efi" then
          (.volid | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}:[A-Za-z0-9_./+-]+$")) and
          (.storage | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$")) and
@@ -715,9 +823,10 @@ pf_pve_vm_destroy_managed() {
     ') || return 1
     if ! jq -e --argjson owners "$resources_json" --argjson entries "$disk_entries" '
       all($entries[]; . as $disk |
-        if ($disk.raw | test("(^|,)media=cdrom(,|$)")) or $disk.volid == "none" then true
-        elif $disk.slot == "ide2" and ($disk.volid | endswith(":cloudinit")) then
+        if $disk.volid == "none" then true
+        elif $disk.slot == "ide2" then
           any($owners[]; .resource_type == "cloudinit" and .slot == $disk.slot and .volid == $disk.volid)
+        elif ($disk.raw | test("(^|,)media=cdrom(,|$)")) then true
         else
           any($owners[]; (.resource_type == "volume" or .resource_type == "efi") and .volid == $disk.volid)
         end

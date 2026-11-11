@@ -2,13 +2,13 @@
 
 ## Scope
 
-Phase 10 adds a root-operated installer and uninstaller for the modular ProxForge CLI. The installer is deliberately limited to Proxmox VE 9.x on Debian 13. It does not create VMs, change Proxmox storage or network configuration, install a service, or modify `main`.
+Phase 10 adds a root-operated installer and uninstaller for the modular ProxForge CLI. The installer is deliberately limited to Proxmox VE 9.2 or newer on Debian 13. It does not create VMs, change Proxmox storage or network configuration, install a service, or modify `main`.
 
 ## Host requirements
 
 The system installer requires:
 
-- Proxmox VE 9.x on Debian 13, with `/etc/pve` present;
+- Proxmox VE 9.2 or newer on Debian 13, with `/etc/pve` present;
 - root privileges and Bash 5.1 or newer;
 - `jq`, `curl`, `flock`, `qemu-img`, `sha256sum`, `sha512sum`, `gpgv`, `qm`, `pvesh`, `pvesm`, `pveversion` and `ip`.
 
@@ -16,22 +16,22 @@ The installer checks the host before writing the managed installation. Missing o
 
 ## Installation
 
-From the checked-out repository on the Proxmox node:
+From the checked-out repository on the Proxmox node, in a root shell:
 
 ```bash
-sudo bash scripts/install.sh
+bash scripts/install.sh
 ```
 
 To allow the installer to install the documented Debian packages when needed:
 
 ```bash
-sudo bash scripts/install.sh --install-dependencies
+bash scripts/install.sh --install-dependencies
 ```
 
 To additionally download Fedora's official public key bundle and validate it against the repository's pinned fingerprints:
 
 ```bash
-sudo bash scripts/install.sh --provision-fedora-keyring
+bash scripts/install.sh --provision-fedora-keyring
 ```
 
 Key provisioning is not performed implicitly. Without the flag, the installed provisioning script is available at `/usr/local/lib/proxforge/scripts/provision-fedora-keyring.sh` and can be run later as root. The installer never changes the Debian official-TLS checksum opt-in setting.
@@ -75,26 +75,26 @@ The install step only prepares the filesystem and verifies prerequisites. It doe
 
 ## Upgrade
 
-Run the same installer from the new checkout. It replaces only a previously managed `/usr/local/lib/proxforge` tree, retains `/etc/proxforge/config.json`, retains the cache/state/log directories, and copies the existing provisioned Fedora keyring into the new software tree. If the staged CLI or existing config fails validation, the old software tree remains in place.
+Run the same installer from the new checkout as root. If using a non-root administrator account, prefix the command with `sudo`. It replaces only a previously managed `/usr/local/lib/proxforge` tree, retains `/etc/proxforge/config.json`, retains the cache/state/log directories, and copies the existing provisioned Fedora keyring into the new software tree. If the staged CLI or existing config fails validation, the old software tree remains in place.
 
 ## Uninstallation
 
 The default uninstaller removes the application files and managed CLI links but preserves configuration and runtime data:
 
 ```bash
-sudo bash /usr/local/lib/proxforge/scripts/uninstall.sh
+bash /usr/local/lib/proxforge/scripts/uninstall.sh
 ```
 
 To remove configuration, request it explicitly. The complete `/etc/proxforge` directory is first archived under `/var/backups/proxforge` with mode `0600`:
 
 ```bash
-sudo bash /usr/local/lib/proxforge/scripts/uninstall.sh --remove-config
+bash /usr/local/lib/proxforge/scripts/uninstall.sh --remove-config
 ```
 
 To also remove image cache, operation state, temporary data and logs:
 
 ```bash
-sudo bash /usr/local/lib/proxforge/scripts/uninstall.sh --remove-config --remove-data
+bash /usr/local/lib/proxforge/scripts/uninstall.sh --remove-config --remove-data
 ```
 
 `--remove-data` is destructive and must be explicitly supplied. The uninstaller verifies the installation manifest before deleting application files and removes only CLI symlinks whose targets match ProxForge's relative entry-point target.

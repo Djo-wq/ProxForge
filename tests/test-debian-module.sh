@@ -46,7 +46,7 @@ DEBIAN_DESCRIPTOR="$PF_MODULE_RESULT_JSON"
 jq -e '
   .release=="13" and
   .filename=="debian-13-generic-amd64.qcow2" and
-  .checksum.url==("https://cdimage.debian.org/cdimage/cloud/trixie/latest/SHA512SUMS") and
+  .checksum.url==("https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS") and
   .checksum.filename=="SHA512SUMS" and
   .checksum.algorithm=="sha512" and
   .disk_format=="qcow2" and .architecture=="x86_64" and
@@ -54,6 +54,7 @@ jq -e '
   .verification.method=="official-tls-checksum" and
   .verification.trust_level=="official_tls" and
   .cloud_init.status=="verified" and .cloud_init.datasource=="NoCloud" and
+  (.allowed_hosts|index("cloud.debian.org")!=null) and
   (.allowed_hosts|index("cdimage.debian.org")!=null) and
   (.allowed_hosts|index("cloudfront.debian.net")!=null)
 ' <<< "$DEBIAN_DESCRIPTOR" >/dev/null || fail "Debian image descriptor does not match the official Cloud image contract"

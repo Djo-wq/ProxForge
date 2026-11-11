@@ -35,18 +35,46 @@ bash scripts/uninstall.sh --prefix "$STAGE_DIR"
 rm -rf -- "$STAGE_DIR"
 ```
 
-Sur un nœud de test Proxmox VE 9.x / Debian 13 dédié, commencer par les commandes d'inspection :
+Sur un nœud de test Proxmox VE 9.2+ / Debian 13 dédié, commencer par les commandes d'inspection :
 
 ```bash
-sudo ./proxforge.sh doctor
-sudo ./proxforge.sh module list
-sudo ./proxforge.sh module validate fedora
-sudo ./proxforge.sh module validate debian
-sudo ./proxforge.sh pve doctor
-sudo ./proxforge.sh pve nodes
-sudo ./proxforge.sh pve storages
-sudo ./proxforge.sh pve bridges
+./proxforge.sh doctor
+./proxforge.sh module list
+./proxforge.sh module validate fedora
+./proxforge.sh module validate debian
+./proxforge.sh pve doctor
+./proxforge.sh pve nodes
+./proxforge.sh pve storages
+./proxforge.sh pve bridges
 ```
+
+Exécuter ces commandes en root (ou les préfixer par `sudo` depuis un compte
+administrateur). Le moteur et l'installateur exigent Proxmox VE 9.2 ou plus récent
+sur Debian 13.
+
+Avant les déploiements de test :
+- **Fedora :** provisionner le trousseau officiel épinglé avec
+  `bash scripts/install.sh --provision-fedora-keyring` lors de l'installation,
+  ou `/usr/local/lib/proxforge/scripts/provision-fedora-keyring.sh` après
+  installation. Sans trousseau valide, le module Fedora échoue volontairement
+  à la vérification de signature.
+- **Debian :** `allow_official_tls_checksum` reste à `false` par défaut.
+  Le garder désactivé dans `/etc/proxforge/config.json`. Pour un essai ponctuel,
+  créer un override séparé afin de ne pas modifier la configuration persistante :
+
+  ```bash
+  cat > /root/proxforge-debian-test.json <<'JSON'
+  {"allow_official_tls_checksum":true}
+  JSON
+  chmod 0600 /root/proxforge-debian-test.json
+  proxforge --config /root/proxforge-debian-test.json config validate
+  proxforge --config /root/proxforge-debian-test.json module image debian latest
+  ```
+
+  Si le pré-vol est validé et que le déploiement est autorisé, fournir aussi
+  `--config /root/proxforge-debian-test.json` avant `deploy`. Le checksum Debian
+  est vérifié via TLS et non via une signature OpenPGP détachée. Supprimer le
+  fichier d'override à la fin des essais.
 
 Vérifier les résultats, la disponibilité d'un stockage et d'un bridge de test, les quotas et les sauvegardes avant d'envisager `deploy`. Cette commande crée réellement une VM et ne fait pas partie du pré-vol non-destructif.
 

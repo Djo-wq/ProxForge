@@ -103,12 +103,19 @@ else
   require_command pveversion
   [[ -d /etc/pve ]] || fail "/etc/pve is missing; this does not look like a Proxmox VE node."
   pve_version=$(pveversion 2>/dev/null | head -n 1 || true)
-  [[ "$pve_version" =~ ^pve-manager/9\. ]] || fail "Proxmox VE 9.x is required; detected: ${pve_version:-unknown}."
+  if [[ "$pve_version" =~ ^pve-manager/([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    pve_major="${BASH_REMATCH[1]}"
+    pve_minor="${BASH_REMATCH[2]}"
+  else
+    fail "Could not parse Proxmox VE version; detected: ${pve_version:-unknown}."
+  fi
+  (( pve_major > 9 || (pve_major == 9 && pve_minor >= 2) )) ||
+    fail "Proxmox VE 9.2 or newer is required; detected: ${pve_version:-unknown}."
   if [[ -r /etc/os-release ]]; then
     # shellcheck source=/dev/null
     source /etc/os-release
     [[ "${ID:-}" == "debian" && "${VERSION_ID:-}" == "13" ]] ||
-      fail "Proxmox VE 9.x on Debian 13 is required."
+      fail "Proxmox VE 9.2+ on Debian 13 is required."
   else
     fail "/etc/os-release is unavailable; unable to verify the host OS."
   fi

@@ -47,7 +47,8 @@ usage_deploy() { printf 'Usage: proxforge.sh deploy <distribution> <release> <pr
 usage_operation() { printf 'Usage: proxforge.sh operation {list|show <uuid>|reconcile <uuid>|rollback <uuid>|resume <uuid>}\n'; }
 
 doctor_command() {
-  local command_name available failed=0 root_ok
+  local command_name available failed=0 root_ok pve_version_output pve_major pve_minor
+  local pve_compatible=false
   local checks='[]' modules_json
   local -a commands=(jq curl flock qemu-img sha256sum sha512sum gpgv qm pvesh pvesm pveversion ip)
   local i
@@ -64,6 +65,18 @@ doctor_command() {
       '. + [{name:$name,available:$available,required:true}]' <<< "$checks") || return 1
     [[ "$available" == "true" ]] || failed=$((failed + 1))
   done
+  pve_version_output=$(pveversion 2>/dev/null | head -n 1 || true)
+  if [[ "$pve_version_output" =~ pve-manager/([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    pve_major="${BASH_REMATCH[1]}"
+    pve_minor="${BASH_REMATCH[2]}"
+    if (( pve_major > 9 || (pve_major == 9 && pve_minor >= 2) )); then
+      pve_compatible=true
+    fi
+  fi
+  checks=$(jq -c --arg version "${pve_version_output:-unknown}" --argjson available "$pve_compatible" \
+    '. + [{name:"proxmox_version",version:$version,available:$available,required:true}]' \
+    <<< "$checks") || return 1
+  [[ "$pve_compatible" == "true" ]] || failed=$((failed + 1))
   modules_json=$(pf_core_distributions_list) || return 1
   jq -cn --arg version "$PF_CORE_VERSION" \
     --arg api "$PF_CORE_MODULE_API_VERSION" \

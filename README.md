@@ -12,7 +12,7 @@
 **⚡ Créez et gérez des machines virtuelles Linux sur Proxmox VE avec des commandes Bash simples.**
 
 ![Bash](https://img.shields.io/badge/langage-Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
-![Proxmox VE](https://img.shields.io/badge/Proxmox_VE-9.x-E57000?style=for-the-badge&logo=proxmox&logoColor=white)
+![Proxmox VE](https://img.shields.io/badge/Proxmox_VE-9.2%2B-E57000?style=for-the-badge&logo=proxmox&logoColor=white)
 ![Modules](https://img.shields.io/badge/modules-Fedora%20%7C%20Debian-3776AB?style=for-the-badge)
 ![Licence](https://img.shields.io/badge/licence-MIT-212121?style=for-the-badge)
 
@@ -37,7 +37,7 @@
 
 ## À propos
 
-**ProxForge** est un outil écrit en Bash pour automatiser la création de machines virtuelles sur **Proxmox VE 9.x**.
+**ProxForge** est un outil écrit en Bash pour automatiser la création de machines virtuelles sur **Proxmox VE 9.2+**.
 
 La version actuelle propose une commande principale, appelée CLI, qui permet de choisir une distribution Linux, de consulter les versions disponibles, de vérifier les images et de lancer la création d'une VM.
 
@@ -70,7 +70,7 @@ Le dépôt contient aussi d'anciens scripts pour Windows, LXC, le réseau et Doc
 
 Pour installer et utiliser la CLI sur un serveur :
 
-- Un serveur **Proxmox VE 9.x** basé sur **Debian 13**.
+- Un serveur **Proxmox VE 9.2+** basé sur **Debian 13**.
 - Un accès au terminal du serveur.
 - Les droits **root** pour installer ProxForge.
 - Les outils nécessaires à ProxForge, notamment `bash`, `jq` et les commandes Proxmox.
@@ -116,29 +116,41 @@ ProxForge/
 Commencez par récupérer le dépôt :
 
 ```bash
-git clone https://github.com/Djo-wq/proxmox-scripts.git
-cd proxmox-scripts
+git clone https://github.com/Djo-wq/ProxForge.git
+cd ProxForge
 ```
 
-Sur votre serveur Proxmox, lancez ensuite l'installation en tant que root :
+Depuis le shell de votre serveur Proxmox, exécutez l'installation en tant que root
+(la session Shell Proxmox est généralement déjà ouverte avec ce compte) :
 
 ```bash
-sudo bash scripts/install.sh
+bash scripts/install.sh
 ```
 
-Pour installer les dépendances Debian manquantes :
+Pour installer explicitement les dépendances Debian manquantes :
 
 ```bash
-sudo bash scripts/install.sh --install-dependencies
+bash scripts/install.sh --install-dependencies
 ```
 
-Le trousseau public Fedora peut être installé séparément :
+Le trousseau public Fedora peut être provisionné séparément :
 
 ```bash
-sudo bash scripts/install.sh --provision-fedora-keyring
+bash scripts/install.sh --provision-fedora-keyring
 ```
 
-Cette dernière option est facultative. Sans elle, ProxForge ne télécharge pas le trousseau Fedora.
+Si vous lancez ces commandes depuis un compte non-root disposant de `sudo`,
+préfixez chacune d'elles par `sudo`.
+
+Le provisionnement du trousseau est nécessaire avant le premier déploiement Fedora.
+Il n'est pas nécessaire pour Debian. Si ProxForge est déjà installé, vous pouvez
+provisionner les clés avec :
+
+```bash
+/usr/local/lib/proxforge/scripts/provision-fedora-keyring.sh
+```
+
+La validation du trousseau est liée aux empreintes épinglées dans le dépôt.
 
 ---
 
@@ -199,11 +211,38 @@ proxforge deploy fedora stable standard local-lvm vmbr0 --name fedora-lab --vmid
 > [!WARNING]
 > La commande `deploy` crée réellement une machine virtuelle sur votre serveur Proxmox. Vérifiez le stockage, le réseau et les ressources disponibles avant de la lancer. Pour les premiers essais, utilisez un serveur de test.
 
+Pour un déploiement Debian, le checksum officiel est vérifié via HTTPS. Cette
+méthode est désactivée par défaut. Pour un essai ponctuel, conservez la
+configuration système inchangée et créez un fichier d'override dédié :
+
+```bash
+cat > /root/proxforge-debian-test.json <<'JSON'
+{"allow_official_tls_checksum":true}
+JSON
+chmod 0600 /root/proxforge-debian-test.json
+proxforge --config /root/proxforge-debian-test.json config validate
+proxforge --config /root/proxforge-debian-test.json module image debian latest
+```
+
+Pour un déploiement de test explicitement autorisé, passez le même fichier
+avec la commande `deploy` :
+
+```bash
+proxforge --config /root/proxforge-debian-test.json deploy debian latest standard local-lvm vmbr0 --name proxforge-debian-test --vmid auto
+```
+
+Cette option reconnaît la confiance dans le checksum reçu via TLS ; elle ne
+constitue pas une signature OpenPGP détachée. Ne l'activez que si cette politique
+correspond à votre exigence de sécurité. Supprimez le fichier d'override après
+les essais.
+
 ---
 
 ## Personnalisation
 
 ProxForge utilise des profils pour définir les ressources des machines virtuelles.
+
+Le champ `disk_gb` définit une taille minimale pour le disque système : ProxForge agrandit le disque importé si nécessaire et ne le réduit jamais si l'image source est déjà plus grande.
 
 Vous pouvez consulter les profils fournis :
 

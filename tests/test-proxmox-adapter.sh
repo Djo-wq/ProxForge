@@ -13,6 +13,10 @@ export FAKE_VM_CONFIG="$TMP_ROOT/vm-config.json"
 export FAKE_VM_STATUS="$TMP_ROOT/vm-status.json"
 export FAKE_VM_RESOURCES="$TMP_ROOT/vm-resources.json"
 export FAKE_QM_LOG="$TMP_ROOT/qm.log"
+export FAKE_DISK_PATH="$TMP_ROOT/imported-system-disk.raw"
+export FAKE_DISK_SIZE_FILE="$TMP_ROOT/imported-system-disk.size"
+: > "$FAKE_DISK_PATH"
+printf '1073741824\n' > "$FAKE_DISK_SIZE_FILE"
 export FAKE_PVE_VERSION="pve-manager/9.2.13/abcdef12"
 printf '{}' > "$FAKE_VM_CONFIG"
 printf '{"status":"stopped"}' > "$FAKE_VM_STATUS"
@@ -65,11 +69,23 @@ printf '[{"ifname":"vmbr0","operstate":"UP","flags":["BROADCAST","UP","LOWER_UP"
 MOCK
 cat > "$MOCK_BIN/pvesm" <<'MOCK'
 #!/usr/bin/env bash
-exit 0
+set -Eeuo pipefail
+if [[ "${1:-}" == "path" && "${2:-}" == "local-lvm:vm-300-disk-0" ]]; then
+  printf '%s\n' "$FAKE_DISK_PATH"
+else
+  printf 'Unexpected pvesm arguments: %s\n' "$*" >&2
+  exit 22
+fi
 MOCK
 cat > "$MOCK_BIN/qemu-img" <<'MOCK'
 #!/usr/bin/env bash
-printf '{"format":"qcow2","virtual-size":1073741824}\n'
+set -Eeuo pipefail
+image_path="${@: -1}"
+if [[ "$image_path" == "$FAKE_DISK_PATH" ]]; then
+  printf '{"format":"raw","virtual-size":%s}\n' "$(cat "$FAKE_DISK_SIZE_FILE")"
+else
+  printf '{"format":"qcow2","virtual-size":1073741824}\n'
+fi
 MOCK
 cat > "$MOCK_BIN/qm" <<'MOCK'
 #!/usr/bin/env bash
@@ -110,6 +126,14 @@ case "$command" in
     volume="${storage}:vm-${vmid}-disk-0"
     jq --arg volume "$volume" '. + {unused0:$volume}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
     mv "$FAKE_VM_CONFIG.new" "$FAKE_VM_CONFIG"
+    : > "$FAKE_DISK_PATH"
+    printf '1073741824\n' > "$FAKE_DISK_SIZE_FILE"
+    ;;
+  resize)
+    vmid="$1"; slot="$2"; size="$3"
+    [[ "$slot" == "scsi0" && "$size" =~ ^[0-9]+G$ ]] || exit 23
+    size_gb="${size%G}"
+    printf '%s\n' "$((size_gb * 1024 * 1024 * 1024))" > "$FAKE_DISK_SIZE_FILE"
     ;;
   set)
     vmid="$1"; shift
@@ -121,7 +145,9 @@ case "$command" in
           shift 2
           ;;
         --ide2)
-          jq --arg volume "$2" '. + {ide2:$volume}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
+          cloudinit_storage="${2%%:*}"
+          cloudinit_volume="${cloudinit_storage}:vm-${vmid}-cloudinit,media=cdrom"
+          jq --arg volume "$cloudinit_volume" '. + {ide2:$volume}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
           mv "$FAKE_VM_CONFIG.new" "$FAKE_VM_CONFIG"
           shift 2
           ;;
@@ -199,7 +225,9 @@ PF_IMAGE_METADATA_JSON=$(<"$IMAGE.json")
 pf_pve_vm_import_disk 300 "$IMAGE" local-lvm || fail "Verified image import primitive failed"
 [[ "$PF_PVE_IMPORTED_VM_ID" == "300" && "$PF_PVE_IMPORTED_SLOT" == "unused0" ]] || fail "Imported disk identity was not captured"
 [[ "$PF_PVE_IMPORTED_VOLUME" == "local-lvm:vm-300-disk-0" ]] || fail "Imported volume identifier mismatch"
-pass "Import validates image metadata, digest and disk format; records exact new unused volume"
+grep -F "importdisk 300 $IMAGE local-lvm --format raw" "$FAKE_QM_LOG" >/dev/null ||
+  fail "LVM-thin storage was not requested to receive a RAW disk"
+pass "Import validates image metadata and requests RAW for LVM-thin storage"
 
 # An existing system disk must never be silently overwritten.
 jq '. + {scsi0:"local-lvm:pre-existing-system-disk"}' "$FAKE_VM_CONFIG" > "$FAKE_VM_CONFIG.new"
@@ -226,12 +254,28 @@ if pf_pve_vm_attach_imported_disk 300 scsi0 local-lvm:vm-300-disk-99 >/dev/null 
 fi
 pass "Existing scsi0 protected; only the exact current unused volume can be attached"
 
+pf_pve_vm_resize_disk 300 scsi0 20 || fail "Profile disk resize failed"
+[[ "$(cat "$FAKE_DISK_SIZE_FILE")" == "21474836480" ]] || fail "System disk was not grown to the profile's 20 GiB minimum"
+[[ "$PF_PVE_SYSTEM_DISK_SIZE_BYTES" == "21474836480" ]] || fail "Resized disk size was not returned to the lifecycle"
+resize_count_before=$(grep -c '^resize ' "$FAKE_QM_LOG" || true)
+pf_pve_vm_resize_disk 300 scsi0 8 || fail "A profile smaller than the existing disk should remain a no-op"
+resize_count_after=$(grep -c '^resize ' "$FAKE_QM_LOG" || true)
+[[ "$resize_count_after" == "$resize_count_before" ]] || fail "Disk resize attempted to shrink an existing disk"
+pass "Profile disk size grows the imported disk when needed and never shrinks it"
+
 pf_pve_vm_configure_cloudinit 300 local-lvm || fail "Cloud-Init configuration failed"
-[[ "$(jq -r '.ide2' "$FAKE_VM_CONFIG")" == "local-lvm:cloudinit" ]] || fail "Cloud-Init drive not attached"
+[[ "$(jq -r '.ide2' "$FAKE_VM_CONFIG")" == "local-lvm:vm-300-cloudinit,media=cdrom" ]] ||
+  fail "Cloud-Init drive does not match Proxmox's generated CD-ROM volume format"
+[[ "$PF_PVE_CLOUDINIT_VOLUME" == "local-lvm:vm-300-cloudinit" ]] ||
+  fail "Adapter did not expose the concrete Cloud-Init volume identifier"
 pf_pve_vm_start 300 || fail "Explicit VM start failed"
 [[ "$(jq -r '.status' "$FAKE_VM_STATUS")" == "running" ]] || fail "VM did not reach running state"
 pass "Cloud-Init attachment and explicit start are read-after-write verified"
 
+FAKE_PVE_VERSION="pve-manager/9.1.21/legacy"
+export FAKE_PVE_VERSION
+PF_PVE_INITIALIZED=false
+if pf_pve_init >/dev/null 2>&1; then fail "Unsupported PVE 9.1 version was accepted"; fi
 FAKE_PVE_VERSION="pve-manager/8.4.1/legacy"
 export FAKE_PVE_VERSION
 PF_PVE_INITIALIZED=false
