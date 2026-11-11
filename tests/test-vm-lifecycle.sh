@@ -104,7 +104,10 @@ pf_pve_vm_attach_imported_disk() {
   [[ "$PF_FAKE_FAIL_ATTACH" != "true" && "$1" == "$PF_PVE_IMPORTED_VM_ID" &&
      "$2" == "scsi0" && "$3" == "$PF_PVE_IMPORTED_VOLUME" ]]
 }
-pf_pve_vm_configure_cloudinit() { [[ "$1" =~ ^[0-9]+$ && "$2" == "local-lvm" ]]; }
+pf_pve_vm_configure_cloudinit() {
+  [[ "$1" =~ ^[0-9]+$ && "$2" == "local-lvm" ]] || return 1
+  PF_PVE_CLOUDINIT_VOLUME="$2:vm-$1-cloudinit"
+}
 pf_pve_vm_start() {
   PF_FAKE_START_COUNT=$((PF_FAKE_START_COUNT + 1))
   PF_FAKE_VM_STATUS="running"
@@ -116,7 +119,7 @@ pf_pve_vm_get_config() {
     name:("pf-valid-" + ($vmid|tostring)),tags:"proxforge",
     efidisk0:("local-lvm:vm-" + ($vmid|tostring) + "-disk-efi,efitype=4m"),
     scsi0:("local-lvm:vm-" + ($vmid|tostring) + "-disk-0"),
-    ide2:"local-lvm:cloudinit"
+    ide2:("local-lvm:vm-" + ($vmid|tostring) + "-cloudinit,media=cdrom")
   }')
 }
 pf_pve_vm_get_status() {
@@ -151,6 +154,8 @@ SUCCESS_EVENTS="$STATE_ROOT/11111111-1111-4111-8111-111111111111/events.jsonl"
 [[ -f "$SUCCESS_MANIFEST" && -f "$SUCCESS_EVENTS" ]] || fail "Operation manifest or event journal was not persisted"
 jq -e '.state=="COMPLETED" and .rollback_status=="NOT_REQUIRED" and .vmid==300 and (.created_resources|length)==4' \
   "$SUCCESS_MANIFEST" >/dev/null || fail "Completed manifest is incomplete"
+jq -e 'any(.created_resources[]; .resource_type=="cloudinit" and .slot=="ide2" and .volid=="local-lvm:vm-300-cloudinit")' \
+  "$SUCCESS_MANIFEST" >/dev/null || fail "Manifest did not record the VM-specific Cloud-Init volume"
 jq -se '
   length >= 12 and
   .[0].event == "INITIALIZED" and
