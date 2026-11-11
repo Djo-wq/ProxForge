@@ -46,6 +46,8 @@ PF_FAKE_START_COUNT=0
 PF_FAKE_FAIL_CREATE=false
 PF_FAKE_FAIL_IMPORT=false
 PF_FAKE_FAIL_ATTACH=false
+PF_FAKE_FAIL_RESIZE=false
+PF_FAKE_DISK_SIZE_GB=0
 PF_FAKE_BLOCK_DESTROY=false
 PF_FAKE_DESTROY_COUNT=0
 PF_FAKE_VM_STATUS=stopped
@@ -103,6 +105,13 @@ pf_pve_vm_import_disk() {
 pf_pve_vm_attach_imported_disk() {
   [[ "$PF_FAKE_FAIL_ATTACH" != "true" && "$1" == "$PF_PVE_IMPORTED_VM_ID" &&
      "$2" == "scsi0" && "$3" == "$PF_PVE_IMPORTED_VOLUME" ]]
+}
+pf_pve_vm_resize_disk() {
+  [[ "$PF_FAKE_FAIL_RESIZE" != "true" && "$1" == "$PF_PVE_IMPORTED_VM_ID" &&
+     "$2" == "scsi0" && "$3" =~ ^[0-9]+$ ]] || return 1
+  PF_FAKE_DISK_SIZE_GB="$3"
+  PF_PVE_SYSTEM_DISK_SIZE_BYTES=$((10#$3 * 1024 * 1024 * 1024))
+  return 0
 }
 pf_pve_vm_configure_cloudinit() {
   [[ "$1" =~ ^[0-9]+$ && "$2" == "local-lvm" ]] || return 1
@@ -167,6 +176,8 @@ jq -se '
 ' "$SUCCESS_EVENTS" >/dev/null || fail "Operation event sequence or intent journal is invalid"
 jq -e '.manifest.state=="COMPLETED" and .manifest.vmid==300' "$RESULT_FILE" >/dev/null || fail "Lifecycle result JSON is incorrect"
 [[ "$PF_FAKE_START_COUNT" == "1" ]] || fail "VM start was not invoked exactly once"
+[[ "$PF_FAKE_DISK_SIZE_GB" == "20" ]] || fail "Selected standard profile disk size was not applied"
+[[ "$PF_PVE_SYSTEM_DISK_SIZE_BYTES" == "21474836480" ]] || fail "Verified profile disk size was not returned"
 pass "Full VM lifecycle completes and persists a schema-aligned manifest plus ordered intent/result events"
 
 # Operation query commands consume the journal without mutating Proxmox.
